@@ -1,6 +1,7 @@
 package com.hoshino.wenku8reader.ui.settings
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -9,8 +10,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -159,10 +162,11 @@ private fun StorageSettingsContent(
                 SegmentedListItem(
                     leadingContent = { Icon(Icons.Filled.Storage, contentDescription = null) },
                     headlineContent = { Text(stringResource(R.string.settings_cache_total_cache)) },
-                    supportingContent = {
+                    trailingContent = {
                         Text(
-                            formatByteSize(stats.cacheDirTotal) + " · " +
-                                stringResource(R.string.settings_cache_total_cache_desc),
+                            text = formatByteSize(stats.cacheDirTotal),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     },
                 )
@@ -170,10 +174,11 @@ private fun StorageSettingsContent(
             {
                 SegmentedListItem(
                     headlineContent = { Text(stringResource(R.string.settings_cache_total_data)) },
-                    supportingContent = {
+                    trailingContent = {
                         Text(
-                            formatByteSize(stats.dataDirTotal) + " · " +
-                                stringResource(R.string.settings_cache_total_data_desc),
+                            text = formatByteSize(stats.dataDirTotal),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     },
                 )
@@ -181,10 +186,11 @@ private fun StorageSettingsContent(
             {
                 SegmentedListItem(
                     headlineContent = { Text(stringResource(R.string.settings_cache_code_cache)) },
-                    supportingContent = {
+                    trailingContent = {
                         Text(
-                            formatByteSize(stats.codeCache) + " · " +
-                                stringResource(R.string.settings_cache_code_cache_desc),
+                            text = formatByteSize(stats.codeCache),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     },
                 )
@@ -201,15 +207,17 @@ private fun StorageSettingsContent(
                 SegmentedListItem(
                     leadingContent = { Icon(Icons.Filled.Image, contentDescription = null) },
                     headlineContent = { Text(stringResource(R.string.settings_cache_images)) },
-                    supportingContent = {
-                        Text(
-                            formatByteSize(stats.imageCache) + " · " +
-                                stringResource(R.string.settings_cache_images_desc),
-                        )
-                    },
                     trailingContent = {
-                        TextButton(onClick = { vm.clearImageCache() }) {
-                            Text(stringResource(R.string.settings_cache_clear))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = formatByteSize(stats.imageCache),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = { vm.clearImageCache() }) {
+                                Text(stringResource(R.string.settings_cache_clear))
+                            }
                         }
                     },
                 )
@@ -218,15 +226,17 @@ private fun StorageSettingsContent(
                 SegmentedListItem(
                     leadingContent = { Icon(Icons.Filled.SystemUpdate, contentDescription = null) },
                     headlineContent = { Text(stringResource(R.string.settings_cache_updates)) },
-                    supportingContent = {
-                        Text(
-                            formatByteSize(stats.updatePackage) + " · " +
-                                stringResource(R.string.settings_cache_updates_desc),
-                        )
-                    },
                     trailingContent = {
-                        TextButton(onClick = { vm.clearUpdatePackages() }) {
-                            Text(stringResource(R.string.settings_cache_clear))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = formatByteSize(stats.updatePackage),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = { vm.clearUpdatePackages() }) {
+                                Text(stringResource(R.string.settings_cache_clear))
+                            }
                         }
                     },
                 )
@@ -235,15 +245,17 @@ private fun StorageSettingsContent(
                 SegmentedListItem(
                     leadingContent = { Icon(Icons.Filled.Public, contentDescription = null) },
                     headlineContent = { Text(stringResource(R.string.settings_cache_other_title)) },
-                    supportingContent = {
-                        Text(
-                            formatByteSize(stats.webViewCache + stats.tempFiles + stats.otherCache) + " · " +
-                                stringResource(R.string.settings_cache_other_desc),
-                        )
-                    },
                     trailingContent = {
-                        TextButton(onClick = { vm.clearOtherCaches() }) {
-                            Text(stringResource(R.string.settings_cache_clear))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = formatByteSize(stats.webViewCache + stats.tempFiles + stats.otherCache),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = { vm.clearOtherCaches() }) {
+                                Text(stringResource(R.string.settings_cache_clear))
+                            }
                         }
                     },
                 )
@@ -252,17 +264,16 @@ private fun StorageSettingsContent(
                 SegmentedListItem(
                     leadingContent = { Icon(Icons.Filled.History, contentDescription = null) },
                     headlineContent = { Text(stringResource(R.string.settings_cache_reading_data)) },
-                    supportingContent = {
+                    trailingContent = {
                         Text(
-                            formatByteSize(stats.preferences) + " · " +
-                                stringResource(R.string.settings_cache_reading_data_desc),
+                            text = formatByteSize(stats.preferences),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     },
                 )
             }
             add {
-                // 与上一行分开：上一行是"这类数据占了多少"，这一行才是"能清理什么"。
-                // 只清理过期记录（本地数据里的书架、设置、Cookie 一律不动）。
                 SegmentedListItem(
                     headlineContent = { Text(stringResource(R.string.settings_cache_cleanup_reading)) },
                     supportingContent = {
@@ -292,7 +303,7 @@ private fun StorageSettingsContent(
                 SegmentedDropdownItem(
                     icon = Icons.Filled.Storage,
                     title = stringResource(R.string.settings_cache_max),
-                    summary = stringResource(R.string.settings_cache_max_summary),
+                    summary = null,
                     items = maxOptions.map { "$it MB" },
                     selectedIndex = maxOptions.indexOfKey(rs.cacheMaxMb),
                     onItemSelected = { index -> vm.setCacheMaxMb(maxOptions[index]) },
@@ -311,10 +322,17 @@ private fun StorageSettingsContent(
                 add {
                     SegmentedListItem(
                         headlineContent = { Text(stringResource(category.labelRes)) },
-                        supportingContent = { Text(formatByteSize(cacheSizes[category.key] ?: 0L)) },
                         trailingContent = {
-                            TextButton(onClick = { vm.clearCache(category.key) }) {
-                                Text(stringResource(R.string.settings_cache_clear))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = formatByteSize(cacheSizes[category.key] ?: 0L),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                TextButton(onClick = { vm.clearCache(category.key) }) {
+                                    Text(stringResource(R.string.settings_cache_clear))
+                                }
                             }
                         },
                     )
@@ -323,12 +341,17 @@ private fun StorageSettingsContent(
             add {
                 SegmentedListItem(
                     headlineContent = { Text(stringResource(R.string.settings_cache_size)) },
-                    supportingContent = {
-                        Text(stringResource(R.string.settings_cache_size_summary, formatByteSize(stats.htmlCache), rs.cacheMaxMb))
-                    },
                     trailingContent = {
-                        TextButton(onClick = { vm.clearCache(null) }) {
-                            Text(stringResource(R.string.settings_cache_clear))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "${formatByteSize(stats.htmlCache)} / ${rs.cacheMaxMb} MB",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = { vm.clearCache(null) }) {
+                                Text(stringResource(R.string.settings_cache_clear))
+                            }
                         }
                     },
                 )

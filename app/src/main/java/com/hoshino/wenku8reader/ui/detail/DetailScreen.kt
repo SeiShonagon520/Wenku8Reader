@@ -193,12 +193,13 @@ fun DetailScreen(
                                     .fillMaxWidth()
                                     .padding(14.dp),
                             ) {
-                                CoverImage(
+                                com.hoshino.wenku8reader.ui.components.BookCover3D(
                                     url = info.coverUrl,
                                     width = 120.dp,
                                     height = 170.dp,
                                     contentDescription = stringResource(R.string.detail_cover),
-                                    cornerRadius = 12.dp,
+                                    cornerRadius = 10.dp,
+                                    elevation = 8.dp,
                                     crossfade = true,
                                 )
                                 Spacer(Modifier.width(16.dp))

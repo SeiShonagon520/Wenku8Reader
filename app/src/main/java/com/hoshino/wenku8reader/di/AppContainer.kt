@@ -58,17 +58,25 @@ class AppContainer(context: Context) {
     /** 设置存储需要应用级作用域来串行落盘（见 ReaderSettings 的说明）。 */
     val readerSettings: ReaderSettings = ReaderSettings(context, applicationScope)
 
-    /** 主镜像随设置可切换（见 ReaderSettings.primaryMirror）；注入内置账号供静默登录。 */
+    val preferences: AppPreferences = AppPreferences(context)
+
+    /** 主镜像随设置可切换（见 ReaderSettings.primaryMirror）；优先使用用户个人账号，未设置则使用内置共享账号。 */
     val client: Wenku8Client = Wenku8Client(
         context,
         { readerSettings.flow.value.primaryMirror },
-        { DefaultAccount.USERNAME to DefaultAccount.PASSWORD },
+        {
+            val user = preferences.customUsername
+            val pass = preferences.customPassword
+            if (!user.isNullOrBlank() && !pass.isNullOrBlank()) {
+                user to pass
+            } else {
+                DefaultAccount.USERNAME to DefaultAccount.PASSWORD
+            }
+        },
         { readerSettings.flow.value.cacheMaxMb },
     )
 
     val repository: Wenku8Repository = Wenku8Repository(client)
-
-    val preferences: AppPreferences = AppPreferences(context)
 
     /**
      * 存储占用统计与清理（缓存目录 + 网页离线缓存 + SharedPreferences）。

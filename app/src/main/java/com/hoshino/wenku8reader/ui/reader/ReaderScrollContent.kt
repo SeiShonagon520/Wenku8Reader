@@ -65,23 +65,43 @@ internal fun ScrollContent(
                     modifier = Modifier.padding(bottom = 16.dp),
                 )
             }
-            itemsIndexed(paragraphs, key = { index, _ -> "p$index" }) { _, paragraph ->
-                Text(
-                    text = paragraph,
-                    color = textColor,
-                    fontFamily = fontFamilyFor(rs.fontFamily),
-                    fontSize = rs.fontSize.sp,
-                    fontWeight = FontWeight(rs.fontWeight),
-                    lineHeight = (rs.fontSize * rs.lineSpacing).sp,
-                )
-            }
-            if (chapter.images.isNotEmpty()) {
-                item(key = "images_gap") { Spacer(Modifier.height(16.dp)) }
-                itemsIndexed(chapter.images, key = { index, _ -> "img$index" }) { index, url ->
+            itemsIndexed(paragraphs, key = { index, _ -> "p$index" }) { index, paragraph ->
+                if (paragraph.startsWith("[[IMG:") && paragraph.endsWith("]]")) {
+                    val url = paragraph.removePrefix("[[IMG:").removeSuffix("]]")
+                    val imgIndex = chapter.images.indexOf(url).coerceAtLeast(0)
                     ReaderIllustration(
                         url = url,
+                        modifier = Modifier.padding(vertical = 12.dp),
                         onClick = onImageClick,
-                        onLongPress = { onImageLongPress(index, url) },
+                        onLongPress = { onImageLongPress(imgIndex, url) },
+                    )
+                } else {
+                    Text(
+                        text = paragraph,
+                        color = textColor,
+                        fontFamily = fontFamilyFor(rs.fontFamily),
+                        fontSize = rs.fontSize.sp,
+                        fontWeight = FontWeight(rs.fontWeight),
+                        lineHeight = (rs.fontSize * rs.lineSpacing).sp,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
+            }
+            // 兜底：若有未在正文中内嵌标记的独立插图（如纯插图章节或卷首彩页），追加在末尾
+            val inlineUrls = paragraphs
+                .filter { it.startsWith("[[IMG:") && it.endsWith("]]") }
+                .map { it.removePrefix("[[IMG:").removeSuffix("]]") }
+                .toSet()
+            val unplacedImages = chapter.images.filter { it !in inlineUrls }
+            if (unplacedImages.isNotEmpty()) {
+                item(key = "images_gap") { Spacer(Modifier.height(16.dp)) }
+                itemsIndexed(unplacedImages, key = { index, _ -> "unplaced_img$index" }) { index, url ->
+                    val fullIndex = chapter.images.indexOf(url).coerceAtLeast(index)
+                    ReaderIllustration(
+                        url = url,
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        onClick = onImageClick,
+                        onLongPress = { onImageLongPress(fullIndex, url) },
                     )
                 }
             }

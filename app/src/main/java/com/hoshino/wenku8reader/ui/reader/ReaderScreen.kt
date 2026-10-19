@@ -4,8 +4,16 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -50,6 +58,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.rememberTextMeasurer
+import coil.imageLoader
+import coil.request.CachePolicy
+import coil.request.ImageRequest
+import com.hoshino.wenku8reader.data.Wenku8Hosts
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -168,14 +181,20 @@ fun ReaderScreen(
     val scope = rememberCoroutineScope()
     // 滚动模式按段落懒加载（章节正文不再是一个巨型 Text）
     val listState = rememberLazyListState()
+    val hazeState = remember { HazeState() }
 
     var immersive by rememberSaveable { mutableStateOf(true) }
     var showSettings by remember { mutableStateOf(false) }
+    var showQuickSettings by remember { mutableStateOf(false) }
     var showToc by remember { mutableStateOf(false) }
     var autoTurn by rememberSaveable { mutableStateOf(false) }
     var suppressImmersiveUntil by remember { mutableStateOf(0L) }
     // 长按插图 → 全屏预览（记录 URL 与序号，序号用于生成保存时的文件名）
     var previewTarget by remember { mutableStateOf<ReaderPreviewTarget?>(null) }
+
+    LaunchedEffect(immersive) {
+        if (immersive) showQuickSettings = false
+    }
 
     val pageMode = !rs.scrollMode
     val chapter = ui.currentChapter
@@ -228,33 +247,51 @@ fun ReaderScreen(
         topBar = {
             AnimatedVisibility(
                 visible = !immersive,
-                enter = expandVertically(),
-                exit = shrinkVertically(),
+                enter = fadeIn(spring()) + slideInVertically(spring(dampingRatio = 0.8f, stiffness = 400f)) { -it },
+                exit = fadeOut(tween(150)) + slideOutVertically(tween(150)) { -it },
             ) {
-                ReaderTopBar(title = ui.title, onBack = onBack)
+                ReaderTopBar(title = ui.title, onBack = onBack, hazeState = hazeState)
             }
         },
         bottomBar = {
             AnimatedVisibility(
                 visible = !immersive,
-                enter = expandVertically(),
-                exit = shrinkVertically(),
+                enter = fadeIn(spring()) + slideInVertically(spring(dampingRatio = 0.8f, stiffness = 400f)) { it },
+                exit = fadeOut(tween(150)) + slideOutVertically(tween(150)) { it },
             ) {
-                ReaderBottomBar(
-                    prevEnabled = prev != null,
-                    nextEnabled = next != null,
-                    autoTurn = autoTurn,
-                    onToggleAutoTurn = { autoTurn = !autoTurn },
-                    onOpenToc = { showToc = true },
-                    onSettings = { showSettings = true },
-                    onPrev = { prev?.let { vm.loadChapter(it.cid) } },
-                    onNext = { next?.let { vm.loadChapter(it.cid) } },
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    AnimatedVisibility(
+                        visible = showQuickSettings,
+                        enter = fadeIn(spring()) + expandVertically(spring(dampingRatio = 0.8f, stiffness = 400f)),
+                        exit = fadeOut(tween(150)) + shrinkVertically(tween(150)),
+                    ) {
+                        ReaderQuickSettingsIsland(
+                            settings = vm.readerSettings,
+                            state = rs,
+                            hazeState = hazeState,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                    }
+                    ReaderBottomBar(
+                        prevEnabled = prev != null,
+                        nextEnabled = next != null,
+                        autoTurn = autoTurn,
+                        onToggleAutoTurn = { autoTurn = !autoTurn },
+                        onOpenToc = { showToc = true },
+                        onSettings = { showSettings = true },
+                        onQuickSettings = { showQuickSettings = !showQuickSettings },
+                        onPrev = { prev?.let { vm.loadChapter(it.cid) } },
+                        onNext = { next?.let { vm.loadChapter(it.cid) } },
+                        hazeState = hazeState,
+                    )
+                }
             }
         },
     ) { _ ->
         BoxWithConstraints(
-            Modifier.fillMaxSize(),
+            Modifier
+                .fillMaxSize()
+                .haze(hazeState),
         ) {
             val bgImagePath = rs.backgroundImagePath
             if (rs.backgroundMode == "image" && bgImagePath != null) {
@@ -292,12 +329,18 @@ fun ReaderScreen(
                     contentPadding.calculateBottomPadding()).roundToPx()
             }
 
-            // ---- async pagination ----
+            // ---- async pagination with accurate TextMeasurer ----
             var pagedChapters by remember(chapter) { mutableStateOf<List<ReaderPage>>(emptyList()) }
+            val textMeasurer = rememberTextMeasurer()
+            val currentFontFamily = fontFamilyFor(rs.fontFamily)
+            val currentFontWeight = FontWeight(rs.fontWeight)
+
             LaunchedEffect(
                 chapter,
                 rs.fontSize,
                 rs.lineSpacing,
+                rs.fontFamily,
+                rs.fontWeight,
                 contentWidthPx,
                 contentHeightPx,
                 pageMode,
@@ -305,16 +348,32 @@ fun ReaderScreen(
                 if (pageMode && chapter != null) {
                     pagedChapters = withContext(Dispatchers.Default) {
                         paginateChapter(
-                            density = density,
+                            textMeasurer = textMeasurer,
                             chapter = chapter,
                             maxWidthPx = contentWidthPx,
                             maxHeightPx = contentHeightPx,
                             fontSizeSp = rs.fontSize,
                             lineSpacing = rs.lineSpacing,
+                            fontFamily = currentFontFamily,
+                            fontWeight = currentFontWeight,
                         )
                     }
                 } else {
                     pagedChapters = emptyList()
+                }
+            }
+
+            // 插图静默后台预加载与解码（使用 Coil 写入内存与磁盘缓存）
+            val context = LocalContext.current
+            LaunchedEffect(chapter?.images) {
+                chapter?.images?.forEach { imgUrl ->
+                    val req = ImageRequest.Builder(context)
+                        .data(imgUrl)
+                        .addHeader("Referer", Wenku8Hosts.IMAGE_REFERER)
+                        .memoryCachePolicy(CachePolicy.ENABLED)
+                        .diskCachePolicy(CachePolicy.ENABLED)
+                        .build()
+                    context.imageLoader.enqueue(req)
                 }
             }
             val pagerState = rememberPagerState { pagedChapters.size }

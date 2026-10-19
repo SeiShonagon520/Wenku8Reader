@@ -23,7 +23,9 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -174,6 +176,7 @@ private fun AppearanceSettings(rs: ReaderSettingsState, vm: ReaderViewModel) {
                 stringResource(R.string.reader_font_size),
                 rs.fontSize.toFloat(),
                 14f..28f,
+                valueText = "${rs.fontSize} pt",
             ) { vm.setFontSize(it.roundToInt()) }
         }
         item {
@@ -181,6 +184,7 @@ private fun AppearanceSettings(rs: ReaderSettingsState, vm: ReaderViewModel) {
                 stringResource(R.string.settings_font_weight),
                 rs.fontWeight.toFloat(),
                 300f..700f,
+                valueText = "${rs.fontWeight}",
             ) { vm.setFontWeight(it.roundToInt()) }
         }
         item {
@@ -188,24 +192,41 @@ private fun AppearanceSettings(rs: ReaderSettingsState, vm: ReaderViewModel) {
                 stringResource(R.string.settings_line_spacing),
                 rs.lineSpacing,
                 1.2f..2.5f,
+                valueText = "${(rs.lineSpacing * 10f).roundToInt() / 10f}x",
             ) { vm.setLineSpacing((it * 10f).roundToInt() / 10f) }
         }
         item {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
             ) {
-                listOf(
-                    "default" to R.string.settings_font_default,
-                    "sans" to R.string.settings_font_sans,
-                    "serif" to R.string.settings_font_serif,
-                    "mono" to R.string.settings_font_mono,
-                ).forEach { (key, res) ->
-                    FilterChip(
-                        selected = rs.fontFamily == key,
-                        onClick = { vm.setFontFamily(key) },
-                        label = { Text(stringResource(res)) },
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    Text(
+                        stringResource(R.string.settings_font),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
                     )
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        listOf(
+                            "default" to R.string.settings_font_default,
+                            "sans" to R.string.settings_font_sans,
+                            "serif" to R.string.settings_font_serif,
+                            "mono" to R.string.settings_font_mono,
+                        ).forEach { (key, res) ->
+                            FilterChip(
+                                selected = rs.fontFamily == key,
+                                onClick = { vm.setFontFamily(key) },
+                                label = { Text(stringResource(res)) },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -309,19 +330,32 @@ private fun MarginSettings(rs: ReaderSettingsState, vm: ReaderViewModel) {
 }
 
 @Composable
-private fun SettingRow(label: String, control: @Composable () -> Unit) {
-    Row(
-        Modifier
+private fun SettingRow(
+    label: String,
+    modifier: Modifier = Modifier,
+    control: @Composable () -> Unit,
+) {
+    Surface(
+        modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f),
-        )
-        control()
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f),
+            )
+            control()
+        }
     }
 }
 
@@ -330,10 +364,46 @@ private fun SettingSliderRow(
     label: String,
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
+    valueText: String? = null,
     onValueChange: (Float) -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        ExpressiveSlider(value = value, onValueChange = onValueChange, valueRange = valueRange)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                ) {
+                    Text(
+                        text = valueText ?: if (value % 1f == 0f) "${value.toInt()}" else "%.1f".format(value),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            ExpressiveSlider(value = value, onValueChange = onValueChange, valueRange = valueRange)
+        }
     }
 }

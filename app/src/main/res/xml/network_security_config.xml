@@ -15,8 +15,11 @@
         </trust-anchors>
     </base-config>
 
-    <!-- 官方 App API 无 HTTPS 端点（http://app.wenku8.com/android.php），单独放行 -->
+    <!-- 允许 wenku8 镜像域名的明文流量（用于官方 App API 及特定 HTTP 镜像回退） -->
     <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">app.wenku8.com</domain>
+        <domain includeSubdomains="true">wenku8.com</domain>
+        <domain includeSubdomains="true">wenku8.cc</domain>
+        <domain includeSubdomains="true">wenku8.net</domain>
+        <domain includeSubdomains="true">777743.xyz</domain>
     </domain-config>
 </network-security-config>

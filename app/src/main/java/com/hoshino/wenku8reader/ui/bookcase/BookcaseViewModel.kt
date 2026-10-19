@@ -8,13 +8,18 @@ import com.hoshino.wenku8reader.data.local.LibraryBook
 import com.hoshino.wenku8reader.data.local.LibraryStore
 import com.hoshino.wenku8reader.data.local.ReadingProgress
 import com.hoshino.wenku8reader.data.local.ReadingProgressStore
+import com.hoshino.wenku8reader.data.BookInfo
+import com.hoshino.wenku8reader.data.Wenku8Client
 import com.hoshino.wenku8reader.ui.common.UiText
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.text.Collator
 import java.util.Locale
 
@@ -27,6 +32,18 @@ enum class BookcaseSortType(val key: String, val labelRes: Int) {
     companion object {
         fun map(key: String): BookcaseSortType =
             entries.firstOrNull { it.key == key } ?: DEFAULT
+    }
+}
+
+enum class BookcaseViewMode(val key: String, val labelRes: Int) {
+    COMPACT("compact", R.string.bookcase_view_compact),
+    GRID("grid", R.string.bookcase_view_grid),
+    SHELF("shelf", R.string.bookcase_view_shelf),
+    LIST("list", R.string.bookcase_view_list);
+
+    companion object {
+        fun map(key: String): BookcaseViewMode =
+            entries.firstOrNull { it.key == key } ?: GRID
     }
 }
 
@@ -56,6 +73,7 @@ data class BookcaseEntry(
 data class BookcaseUiState(
     val sortType: BookcaseSortType = BookcaseSortType.DEFAULT,
     val sortReversed: Boolean = false,
+    val viewMode: BookcaseViewMode = BookcaseViewMode.GRID,
     val isLoading: Boolean = false,
     val entries: List<BookcaseEntry> = emptyList(),
     val error: UiText? = null,
@@ -65,17 +83,125 @@ class BookcaseViewModel(
     private val libraryStore: LibraryStore,
     private val progressStore: ReadingProgressStore,
     private val preferences: AppPreferences,
+    private val client: Wenku8Client,
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(
         BookcaseUiState(
             sortType = BookcaseSortType.map(preferences.bookcaseSortType),
             sortReversed = preferences.bookcaseSortReversed,
+            viewMode = BookcaseViewMode.map(preferences.bookcaseViewMode),
         )
     )
     val ui: StateFlow<BookcaseUiState> = _ui.asStateFlow()
 
+    private val _currentUsername = MutableStateFlow(preferences.customUsername)
+    val currentUsername: StateFlow<String?> = _currentUsername.asStateFlow()
+
+    private val _isCustomAccount = MutableStateFlow(preferences.isCustomAccount)
+    val isCustomAccount: StateFlow<Boolean> = _isCustomAccount.asStateFlow()
+
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
     private var natural: List<BookcaseEntry> = emptyList()
+
+    /** 登录个人文库8账号 */
+    fun login(user: String, pass: String, onResult: (Boolean, String) -> Unit) {
+        val trimmedUser = user.trim()
+        val trimmedPass = pass.trim()
+        if (trimmedUser.isBlank() || trimmedPass.isBlank()) {
+            onResult(false, "账号与密码不能为空")
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            _isSyncing.value = true
+            try {
+                val res = client.login(trimmedUser, trimmedPass)
+                withContext(Dispatchers.Main) {
+                    if (res.success) {
+                        preferences.customUsername = trimmedUser
+                        preferences.customPassword = trimmedPass
+                        _currentUsername.value = trimmedUser
+                        _isCustomAccount.value = true
+                        onResult(true, "登录成功，已绑定个人账号")
+                    } else {
+                        val msg = res.message.ifBlank { "登录失败，请检查账号密码或网络连接" }
+                        onResult(false, msg)
+                    }
+                }
+            } finally {
+                _isSyncing.value = false
+            }
+        }
+    }
+
+    /** 退出个人文库8账号并切回访客模式 */
+    fun logout(onResult: (String) -> Unit) {
+        preferences.clearCustomAccount()
+        _currentUsername.value = null
+        _isCustomAccount.value = false
+        onResult("已退出当前账号，已切换为访客模式")
+    }
+
+    /**
+     * 单向同步云端书架：从文库8网页端拉取个人书架收藏列表，批量导入到本地 Room 数据库。
+     * 本地书架独立存储，不向云端回写，避免触发站点风控与账号限制。
+     */
+    fun syncCloudBookshelf(onResult: (Boolean, String) -> Unit) {
+        if (_isSyncing.value) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _isSyncing.value = true
+            try {
+                val loggedIn = client.ensureLoggedIn()
+                if (!loggedIn) {
+                    withContext(Dispatchers.Main) {
+                        onResult(false, "登录态失效，请重新登录个人账号")
+                    }
+                    return@launch
+                }
+                val cloudItems = client.bookcase()
+                if (cloudItems.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        onResult(true, "云端书架为空或暂未读取到书籍")
+                    }
+                    return@launch
+                }
+                var newCount = 0
+                for (item in cloudItems) {
+                    if (item.aid <= 0) continue
+                    runCatching {
+                        val exists = libraryStore.contains(item.aid)
+                        if (exists) {
+                            return@runCatching
+                        }
+                        val info = runCatching {
+                            withTimeoutOrNull(3000L) { client.bookInfo(item.aid) }
+                        }.getOrNull() ?: BookInfo(id = item.aid, title = item.name)
+                        libraryStore.add(info)
+                        newCount++
+                    }
+                }
+                load()
+                withContext(Dispatchers.Main) {
+                    onResult(
+                        true,
+                        if (newCount > 0) {
+                            "书架同步成功：云端共 ${cloudItems.size} 本，新增导入 $newCount 本"
+                        } else {
+                            "书架同步成功：云端共 ${cloudItems.size} 本，本地书架已全部收录"
+                        }
+                    )
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onResult(false, "同步失败：${e.localizedMessage ?: "网络异常"}")
+                }
+            } finally {
+                _isSyncing.value = false
+            }
+        }
+    }
 
     init {
         // 数据源是数据库 Flow：详情页加/删收藏、阅读器写入进度之后，书架会自动刷新，
@@ -132,6 +258,11 @@ class BookcaseViewModel(
         preferences.bookcaseSortReversed = reversed
         _ui.update { it.copy(sortReversed = reversed) }
         applySort()
+    }
+
+    fun setViewMode(mode: BookcaseViewMode) {
+        preferences.bookcaseViewMode = mode.key
+        _ui.update { it.copy(viewMode = mode) }
     }
 
     private fun applySort() {

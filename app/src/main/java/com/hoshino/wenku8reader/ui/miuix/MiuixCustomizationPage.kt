@@ -78,7 +78,11 @@ private val LIGHT_TEXT_COLORS = listOf(
 
 /** 深色模式阅读器背景色（首项为默认纯黑）。 */
 private val DARK_PAPER_COLORS = listOf(
-    0xFF000000L, 0xFF10141AL, 0xFF1F1F1FL, 0xFF183028L, 0xFF262220L,
+    0xFF000000L, // 纯黑 AMOLED
+    0xFF1B2434L, // 午夜深蓝 (夜空冷蓝，明显区别于纯黑)
+    0xFF24272BL, // 炭灰柔黑 (柔和暗灰，不刺眼)
+    0xFF183226L, // 暗夜墨绿 (护眼深绿)
+    0xFF332720L, // 暖深咖啡 (温暖深褐)
 )
 
 /** 深色模式阅读器字体色（首项为默认纯白）。 */

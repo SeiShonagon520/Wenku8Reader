@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,6 +44,8 @@ import com.hoshino.wenku8reader.R
 import com.hoshino.wenku8reader.data.HomeSection
 import com.hoshino.wenku8reader.ui.common.CoverImage
 import com.hoshino.wenku8reader.ui.common.coverImageRequest
+import com.hoshino.wenku8reader.ui.components.BookCover3D
+import com.hoshino.wenku8reader.ui.components.bounceClick
 import com.hoshino.wenku8reader.ui.explore.ExploreUiState
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
@@ -156,14 +159,26 @@ internal fun MiuixHomeBody(
 @Composable
 internal fun MiuixHomeSectionBlock(section: HomeSection, onOpenBook: (Int) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
-        Text(
-            text = section.title,
-            style = MiuixTheme.textStyles.title4,
-            color = MiuixTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        Row(
             modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 6.dp),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(16.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(MiuixTheme.colorScheme.primary),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = section.title,
+                style = MiuixTheme.textStyles.title4,
+                color = MiuixTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         if (section.books.any { it.coverUrl != null }) {
             LazyRow(
                 Modifier.fillMaxWidth(),
@@ -180,7 +195,7 @@ internal fun MiuixHomeSectionBlock(section: HomeSection, onOpenBook: (Int) -> Un
     }
 }
 
-/** 文字榜单卡片：序号 + 书名，整行可点。 */
+/** 文字榜单卡片：序号徽章 + 书名，整行可点。 */
 @Composable
 internal fun MiuixRankCard(section: HomeSection, onOpenBook: (Int) -> Unit) {
     Card(
@@ -194,21 +209,41 @@ internal fun MiuixRankCard(section: HomeSection, onOpenBook: (Int) -> Unit) {
             contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
         ),
     ) {
-        Column(Modifier.padding(horizontal = 16.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
             section.books.take(10).forEachIndexed { index, book ->
+                val rankColor = when (index) {
+                    0 -> Color(0xFFFFB300) // 金色
+                    1 -> Color(0xFF78909C) // 银色
+                    2 -> Color(0xFF8D6E63) // 铜色
+                    else -> MiuixTheme.colorScheme.onSurfaceSecondary
+                }
+                val rankBg = when (index) {
+                    0 -> Color(0xFFFFB300).copy(alpha = 0.16f)
+                    1 -> Color(0xFF78909C).copy(alpha = 0.16f)
+                    2 -> Color(0xFF8D6E63).copy(alpha = 0.16f)
+                    else -> Color.Transparent
+                }
                 Row(
                     Modifier
                         .fillMaxWidth()
                         .clickable { onOpenBook(book.id) }
-                        .padding(vertical = 10.dp),
+                        .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = "${index + 1}",
-                        style = MiuixTheme.textStyles.body1,
-                        color = MiuixTheme.colorScheme.primary,
-                        modifier = Modifier.width(28.dp),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(rankBg),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "${index + 1}",
+                            style = MiuixTheme.textStyles.body1,
+                            color = rankColor,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
                     Text(
                         text = book.name,
                         style = MiuixTheme.textStyles.body1,
@@ -417,7 +452,7 @@ internal fun MiuixSearchBody(ui: ExploreUiState, onOpenBook: (Int) -> Unit) {
 // 共用小件
 // ------------------------------------------------------------------ //
 
-/** 封面卡片：104×146 封面 + 两行书名（HyperOS 书城的卡片形态）。 */
+/** 封面卡片：拟真实体 3D 封面 + 两行书名 + 触感回弹。 */
 @Composable
 internal fun MiuixCoverCard(
     book: com.hoshino.wenku8reader.data.HomeBook,
@@ -426,16 +461,17 @@ internal fun MiuixCoverCard(
     Column(
         Modifier
             .width(112.dp)
-            .padding(4.dp)
-            .clickable { onOpenBook(book.id) },
+            .padding(horizontal = 4.dp, vertical = 2.dp)
+            .bounceClick(0.96f) { onOpenBook(book.id) },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        CoverImage(
+        BookCover3D(
             url = book.coverUrl,
             width = 104.dp,
             height = 146.dp,
             contentDescription = book.name,
-            cornerRadius = 12.dp,
+            cornerRadius = 8.dp,
+            elevation = 4.dp,
         )
         Spacer(Modifier.height(6.dp))
         Text(
@@ -448,3 +484,4 @@ internal fun MiuixCoverCard(
         )
     }
 }
+

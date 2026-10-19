@@ -28,6 +28,8 @@ release/
 *.tmp
 *.swp
 *~
+/*.png
+gradle/gradle-daemon-jvm.properties
 
 # ===== Android Studio / IntelliJ IDEA =====
 .idea/

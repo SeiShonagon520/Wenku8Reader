@@ -97,8 +97,17 @@ object Parsers {
     /** 折叠正文里的连续空行。提到文件级常量，避免 parseChapter 每章都新建一次正则。 */
     private val MULTI_NEWLINE = Regex("\n{3,}")
 
+    private val BOOKCASE_ROW = Pattern.compile("<tr[^>]*>(.*?)</tr>", Pattern.DOTALL)
+    private val BOOKCASE_BOOK_LINK = Pattern.compile(
+        "<a[^>]+href=['\"](?:https?://[^/]+)?(?:/?)book/(\\d+)\\.htm['\"][^>]*>([^<]+)</a>",
+        Pattern.DOTALL
+    )
+    private val BOOKCASE_CHAPTER_LINK = Pattern.compile(
+        "<a[^>]+href=['\"](?:https?://[^/]+)?(?:/?)novel/\\d+/\\d+/(\\d+)\\.htm['\"][^>]*>([^<]+)</a>",
+        Pattern.DOTALL
+    )
     private val BOOKCASE_LINK = Pattern.compile(
-        "<a[^>]+href=\"([^\"]*readbookcase\\.php[^\"]*)\"[^>]*>([^<]+?)</a>", Pattern.DOTALL
+        "<a[^>]+href=['\"]([^'\"]*readbookcase\\.php[^'\"]*)['\"][^>]*>([^<]+?)</a>", Pattern.DOTALL
     )
 
     internal fun unescape(s: String): String = s
@@ -340,50 +349,131 @@ object Parsers {
         }
         if (raw == null) return ChapterContent(title, "", emptyList())
 
-        // illustration image urls（同样可能是 http://，需升级协议，否则被明文流量策略拦截）
-        val images = mutableListOf<String>()
-        val im = CHAPTER_IMG.matcher(raw)
-        while (im.find()) images.add(Wenku8Hosts.normalizeImageUrl(im.groupOrEmpty(1)))
-
+        // 1. 去除防盗链/宣传水印（含 ul#contentdp 等）
         var body = raw.replace(CONTENT_WATERMARK, "")
-        body = body.replace(LINE_BREAK, "\n")
-        body = body.replace(PARAGRAPH_END, "\n")
+
+        // 2. 识别日轻假名/注音标签 <ruby>汉字<rt>假名</rt></ruby> -> 汉字(假名)
+        body = body.replace(Regex("<ruby[^>]*>(.*?)(?:<rp>.*?</rp>)?<rt[^>]*>(.*?)</rt>(?:<rp>.*?</rp>)?</ruby>", RegexOption.DOT_MATCHES_ALL)) { m ->
+            val baseText = m.groupValues[1].replace(ANY_TAG, "").trim()
+            val rtText = m.groupValues[2].replace(ANY_TAG, "").trim()
+            if (rtText.isNotEmpty()) "$baseText($rtText)" else baseText
+        }
+
+        // 3. 原位保留插图：将 <div class="divimage">...<img src="...">...</div> 替换为内联标记 [[IMG:url]]
+        val images = mutableListOf<String>()
+        val imgRegex = Regex("<div[^>]*class=['\"]divimage['\"][^>]*>.*?<img[^>]+src=['\"]([^'\"]+)['\"][^>]*>.*?</div>|<img[^>]+src=['\"]([^'\"]+)['\"][^>]*>", RegexOption.DOT_MATCHES_ALL)
+        body = body.replace(imgRegex) { m ->
+            val rawUrl = m.groups[1]?.value ?: m.groups[2]?.value ?: ""
+            if (rawUrl.isNotBlank()) {
+                val norm = Wenku8Hosts.normalizeImageUrl(rawUrl)
+                if (norm !in images) images.add(norm)
+                "\n\n[[IMG:$norm]]\n\n"
+            } else {
+                ""
+            }
+        }
+
+        // 4. 清理换行符与所有余下 HTML 标签
+        body = body.replace(LINE_BREAK, "\n").replace(PARAGRAPH_END, "\n")
         var text = body.replace(ANY_TAG, "")
-        text = unescape(text).replace("\u3000", "  ")
-        val lines = text.split("\n").map { it.trim() }
-        text = lines.joinToString("\n").replace(MULTI_NEWLINE, "\n\n").trim()
-        return ChapterContent(title, text, images)
+        text = unescape(text)
+
+        // 5. 段落规范化：全角缩进规范（\u3000\u3000）与空行折叠
+        val lines = text.split("\n").mapNotNull { line ->
+            val trimmed = line.trim()
+            when {
+                trimmed.isEmpty() -> null
+                trimmed.startsWith("[[IMG:") && trimmed.endsWith("]]") -> trimmed
+                else -> {
+                    // 清理旧有的不规范空格，规范为标准中文全角缩进
+                    val cleanText = trimmed.trimStart(' ', '\t', '\u3000', '\u00A0')
+                    if (cleanText.isEmpty()) null else "\u3000\u3000$cleanText"
+                }
+            }
+        }
+        val cleanFullText = lines.joinToString("\n\n")
+        return ChapterContent(title, cleanFullText, images)
     }
 
     // ------------------------------------------------------------------ //
     fun parseBookcase(html: String): List<BookcaseItem> {
-        class Row {
-            var aid: Int = 0
-            var name: String = ""
-            var latest: String? = null
-            var latestCid: String? = null
-        }
-        val rows = LinkedHashMap<String, Row>()
-        val m = BOOKCASE_LINK.matcher(html)
-        while (m.find()) {
-            val href = m.groupOrEmpty(1)
-            val text = clean(m.groupOrEmpty(2))
-            val qs = href.substringAfter("?", "")
-            val params = qs.split("&")
-                .mapNotNull { kv ->
-                    val p = kv.split("=", limit = 2)
-                    if (p.size == 2) p[0] to p[1] else null
-                }.toMap()
-            val bid = params["bid"] ?: continue
-            val row = rows.getOrPut(bid) { Row().apply { aid = params["aid"]?.toIntOrNull() ?: 0 } }
-            if (params.containsKey("cid")) {
-                row.latest = text
-                row.latestCid = params["cid"]
-            } else if (row.name.isEmpty()) {
-                row.name = text
+        val result = LinkedHashMap<Int, BookcaseItem>()
+
+        // 策略 1：表格逐行解析（标准文库8/Jieqi CMS 书架结构，精准匹配书籍链接与最新章节）
+        val rowMatcher = BOOKCASE_ROW.matcher(html)
+        while (rowMatcher.find()) {
+            val rowHtml = rowMatcher.groupOrEmpty(1)
+            val bookMatcher = BOOKCASE_BOOK_LINK.matcher(rowHtml)
+            if (bookMatcher.find()) {
+                val aid = bookMatcher.groupOrEmpty(1).toIntOrNull() ?: 0
+                val title = clean(bookMatcher.groupOrEmpty(2))
+                if (aid > 0 && title.isNotEmpty()) {
+                    var latestName: String? = null
+                    var latestCid: String? = null
+
+                    val chapMatcher = BOOKCASE_CHAPTER_LINK.matcher(rowHtml)
+                    if (chapMatcher.find()) {
+                        latestCid = chapMatcher.groupOrEmpty(1)
+                        latestName = clean(chapMatcher.groupOrEmpty(2))
+                    } else {
+                        val readMatcher = BOOKCASE_LINK.matcher(rowHtml)
+                        while (readMatcher.find()) {
+                            val href = readMatcher.groupOrEmpty(1)
+                            val text = clean(readMatcher.groupOrEmpty(2))
+                            val qs = href.substringAfter("?", "")
+                            val params = qs.split("&").mapNotNull { kv ->
+                                val p = kv.split("=", limit = 2)
+                                if (p.size == 2) p[0] to p[1] else null
+                            }.toMap()
+                            if (params.containsKey("cid")) {
+                                latestCid = params["cid"]
+                                latestName = text
+                                break
+                            }
+                        }
+                    }
+                    result[aid] = BookcaseItem(aid, title, latestName, latestCid)
+                }
             }
         }
-        return rows.values.map { BookcaseItem(it.aid, it.name, it.latest, it.latestCid) }
+
+        // 策略 2：若表格解析未命中（部分自定义主题或移动版），回退至 readbookcase.php 关联解析
+        if (result.isEmpty()) {
+            class Row {
+                var aid: Int = 0
+                var name: String = ""
+                var latest: String? = null
+                var latestCid: String? = null
+            }
+            val rows = LinkedHashMap<String, Row>()
+            val m = BOOKCASE_LINK.matcher(html)
+            while (m.find()) {
+                val href = m.groupOrEmpty(1)
+                val text = clean(m.groupOrEmpty(2))
+                val qs = href.substringAfter("?", "")
+                val params = qs.split("&")
+                    .mapNotNull { kv ->
+                        val p = kv.split("=", limit = 2)
+                        if (p.size == 2) p[0] to p[1] else null
+                    }.toMap()
+                val bid = params["bid"] ?: continue
+                val row = rows.getOrPut(bid) { Row().apply { aid = params["aid"]?.toIntOrNull() ?: 0 } }
+                if (params.containsKey("cid")) {
+                    row.latest = text
+                    row.latestCid = params["cid"]
+                } else if (row.name.isEmpty()) {
+                    row.name = text
+                }
+            }
+            for (r in rows.values) {
+                if (r.aid > 0) {
+                    val fallbackName = r.name.ifBlank { "书籍 ${r.aid}" }
+                    result[r.aid] = BookcaseItem(r.aid, fallbackName, r.latest, r.latestCid)
+                }
+            }
+        }
+
+        return result.values.toList()
     }
 
     // ------------------------------------------------------------------ //

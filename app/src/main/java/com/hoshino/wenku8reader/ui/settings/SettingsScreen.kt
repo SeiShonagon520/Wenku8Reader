@@ -105,8 +105,8 @@ fun SettingsPage(
                 .padding(inner)
                 .verticalScroll(rememberScrollState()),
         ) {
-            // 账号（说明性） + 各分类入口
-            AccountSection()
+            // 账号管理与同步 + 各分类入口
+            AccountSection(vm = vm)
             CategoryEntriesSection(
                 version = version,
                 onOpenAppearance = onOpenAppearance,

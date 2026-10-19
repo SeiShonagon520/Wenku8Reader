@@ -9,23 +9,23 @@ package com.hoshino.wenku8reader.data
  */
 object Wenku8Hosts {
 
-    /** 可用镜像（第一个为默认主站）。 */
+    /** 可用镜像（第一个为默认主站，实测 wenku8.cc 为当前直接响应的免盾高速源，其他为容灾备用源）。 */
     val MIRRORS: List<String> = listOf(
         "https://www.wenku8.cc",
         "https://www.wenku8.net",
         "https://www.wenku8.com",
+        "https://wap.wenku8.cc",
     )
 
-    /** 默认主站镜像。 */
+    /** 默认主站镜像（优先使用无盾高速通道 wenku8.cc）。 */
     const val DEFAULT_BASE: String = "https://www.wenku8.cc"
 
     /**
      * 图片请求携带的 Referer（取自主站地址）。
      *
-     * 实测（2026-09）两个图片域名 `img.wenku8.com` / `pic.777743.xyz` 对 Referer
-     * **并不敏感**——带 `.cc`/`.net`/`.com` 甚至完全不带 Referer 都返回 200。
-     * 因此这里保留 Referer 只是为了兼容站点未来可能启用的防盗链策略，
-     * 并非当前加载成功的必要条件。
+     * 实测两个图片域名 `img.wenku8.com` / `pic.777743.xyz` 对 Referer
+     * 并不敏感——带 `.cc`/`.net`/`.com` 甚至完全不带 Referer 都返回 200。
+     * 保留 Referer 以兼容站点防盗链策略。
      */
     const val IMAGE_REFERER: String = DEFAULT_BASE + "/"
 
@@ -33,7 +33,13 @@ object Wenku8Hosts {
     fun isValidMirror(url: String): Boolean = url in MIRRORS
 
     /** 图片内容域名（站点给出的地址是明文 http，但这些域名同样支持 https）。 */
-    private val IMAGE_HOSTS = listOf("img.wenku8.com", "pic.777743.xyz")
+    private val IMAGE_HOSTS = listOf(
+        "img.wenku8.com",
+        "pic.777743.xyz",
+        "image.wenku8.cc",
+        "img.wenku8.cc",
+        "pic.wenku8.com",
+    )
 
     /**
      * 把图片地址统一升级为 HTTPS。

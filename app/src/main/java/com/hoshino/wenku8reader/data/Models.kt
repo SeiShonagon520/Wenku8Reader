@@ -47,6 +47,13 @@ data class BookcaseItem(
     val latestCid: String? = null,
 )
 
+/** 账号登录结果封装，携带成功状态与文案原因 */
+@Immutable
+data class LoginResult(
+    val success: Boolean,
+    val message: String = "",
+)
+
 /** A chapter flattened out of the volume tree, for the reader */
 @Immutable
 data class FlatChapter(val index: Int, val cid: String, val name: String)

@@ -100,6 +100,10 @@ android {
             //（ST/TS 字典，约 0.45MB）必须保留，否则简繁转换会失效。
             excludes += setOf("nlp/**")
         }
+        jniLibs {
+            // 兼容 Android 15/16 16 KB 内存分页对齐，避免系统弹出未对齐兼容模式警告
+            useLegacyPackaging = false
+        }
     }
 }
 
@@ -157,6 +161,13 @@ dependencies {
     // DataStore：设置项（替代 shared_prefs/settings.xml）。写入是事务性的
     //（临时文件 + rename），不会出现"写一半进程被杀→设置文件损坏"。
     implementation(libs.androidx.datastore.preferences)
+
+    // 高精细度 UI 增强库：Haze 实时毛玻璃、Telephoto 手势画廊切片缩放、Vico 现代数据图表
+    implementation(libs.haze)
+    implementation(libs.haze.materials)
+    implementation(libs.telephoto.zoomable.image.coil)
+    implementation(libs.vico.compose.m3)
+
     debugImplementation(libs.compose.ui.tooling)
 
     // 本地单元测试：Parsers / UpdateChecker.isNewer 等纯逻辑（无 Android 依赖）在此覆盖。

@@ -1,6 +1,5 @@
 package com.hoshino.wenku8reader.ui.explore
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -11,44 +10,49 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hoshino.wenku8reader.data.HomeBook
-import com.hoshino.wenku8reader.ui.common.CoverImage
+import com.hoshino.wenku8reader.ui.components.BookCover3D
+import com.hoshino.wenku8reader.ui.components.bounceClick
 
 /**
- * 探索页可复用的列表项组件（从 `ExploreScreen.kt` 拆出，见评估报告 2.5-3）。
- *
- * 这些组件在同屏内会重复出现几十次（首页每区块 4 张、标签页每分类一排），
- * 因此统一使用低开销的普通 [clickable]（见报告 2.3-23 / 3.3-1）：
- * 波纹由全局 `LocalIndication` 提供，不额外挂 pressed 状态与按压缩放动画。
+ * 探索页可复用的实体封面卡片：
+ * - 拟真实体书脊光影与透视投影（BookCover3D）；
+ * - 触感微交互（bounceClick 0.96f）；
+ * - 细腻字重与居中两行排版。
  */
 @Composable
 internal fun HomeCoverCard(b: HomeBook, onOpenBook: (Int) -> Unit) {
     Column(
         Modifier
             .width(104.dp)
-            .padding(4.dp)
-            // 高频组合项：用普通 clickable，避免 pressClickable 的动画状态开销
-            .clickable { onOpenBook(b.id) },
+            .padding(horizontal = 4.dp, vertical = 2.dp)
+            .bounceClick(targetScale = 0.96f, onClick = { onOpenBook(b.id) }),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        CoverImage(
+        BookCover3D(
             url = b.coverUrl,
-            width = 104.dp,
-            height = 146.dp,
+            width = 100.dp,
+            height = 142.dp,
             contentDescription = b.name,
-            // 封面圆角对齐 M3 Expressive 形状刻度的 medium（12dp）
-            cornerRadius = 12.dp,
+            cornerRadius = 8.dp,
+            elevation = 4.dp,
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(6.dp))
         Text(
             b.name,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.labelMedium.copy(
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.Medium,
+            ),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
         )
     }
 }
+

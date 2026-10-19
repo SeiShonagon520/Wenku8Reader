@@ -1,6 +1,8 @@
 package com.hoshino.wenku8reader
 
+import android.app.Activity
 import android.app.Application
+import android.os.Bundle
 import com.hoshino.wenku8reader.di.AppContainer
 import kotlinx.coroutines.launch
 
@@ -14,6 +16,15 @@ class Wenku8Application : Application() {
         container = AppContainer(this)
         // 放在 container 之后：静态引用一旦非空，container 必然已可用
         instance = this
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) { currentActivity = activity }
+            override fun onActivityStarted(activity: Activity) { currentActivity = activity }
+            override fun onActivityResumed(activity: Activity) { currentActivity = activity }
+            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivityStopped(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+            override fun onActivityDestroyed(activity: Activity) { if (currentActivity == activity) currentActivity = null }
+        })
         silentLogin()
     }
 
@@ -29,15 +40,15 @@ class Wenku8Application : Application() {
         super.onTerminate()
     }
 
-    /** Signs in with the built-in default account so content works without any login UI. */
+    /**
+     * 静默预热/登录：
+     * 小说浏览与阅读完全公开，无需登录；仅云端书架需要登录态。
+     * 此处延后执行，避免应用冷启动时与首屏页面争抢网络连接或因未获得 Cloudflare 令牌直接被 403 拦截。
+     */
     private fun silentLogin() {
-        // 从容器统一启动：后台任务与下载/更新共用同一个应用级作用域（见 AppContainer.launchIo）
         container.launchIo {
-            repeat(3) { attempt ->
-                val ok = runCatching { container.client.ensureLoggedIn() }.getOrDefault(false)
-                if (ok) return@launchIo
-                kotlinx.coroutines.delay(2000L * (attempt + 1))
-            }
+            kotlinx.coroutines.delay(1000)
+            runCatching { container.client.ensureLoggedIn() }
         }
     }
 
@@ -51,6 +62,10 @@ class Wenku8Application : Application() {
          */
         @Volatile
         internal var instance: Wenku8Application? = null
+            private set
+
+        @Volatile
+        internal var currentActivity: Activity? = null
             private set
     }
 }

@@ -69,4 +69,57 @@ class ReadingStatsMathTest {
         // 无活跃天：避免除零，返回 0
         assertEquals(0, avgDailyMinutes(totalSeconds = 600, activeDays = 0))
     }
+
+    @Test
+    fun `全部尺度_仅有今天记录时保底展示最近364天以避免单日单点NaN崩溃`() {
+        val (start, end) = rangeOfScale(ReadingScale.ALL, minEpochDay = today.toEpochDay(), today = today)
+        assertEquals(today.minusDays(364), start)
+        assertEquals(today, end)
+    }
+
+    @Test
+    fun `全部尺度_空记录时保底展示最近364天`() {
+        val (start, end) = rangeOfScale(ReadingScale.ALL, minEpochDay = null, today = today)
+        assertEquals(today.minusDays(364), start)
+        assertEquals(today, end)
+    }
+
+    @Test
+    fun `全部尺度_历史记录早于1年时完整展示至历史起点`() {
+        val earlyDate = today.minusDays(500)
+        val (start, end) = rangeOfScale(ReadingScale.ALL, minEpochDay = earlyDate.toEpochDay(), today = today)
+        assertEquals(earlyDate, start)
+        assertEquals(today, end)
+    }
+
+    @Test
+    fun `全部尺度_极端时间戳时上限截断至2年_防止几千列OOM`() {
+        val ancientDate = LocalDate.of(1970, 1, 1)
+        val (start, end) = rangeOfScale(ReadingScale.ALL, minEpochDay = ancientDate.toEpochDay(), today = today)
+        assertEquals(today.minusYears(2), start)
+        assertEquals(today, end)
+    }
+
+    @Test
+    fun `全部尺度_未来异常时间戳时安全回退`() {
+        val futureDate = today.plusDays(100)
+        val (start, end) = rangeOfScale(ReadingScale.ALL, minEpochDay = futureDate.toEpochDay(), today = today)
+        assertEquals(today.minusDays(364), start)
+        assertEquals(today, end)
+    }
+
+    @Test
+    fun `周月年尺度正常取其对应周期起点`() {
+        val (wStart, wEnd) = rangeOfScale(ReadingScale.WEEK, null, today)
+        assertEquals(today.with(java.time.DayOfWeek.MONDAY), wStart)
+        assertEquals(today, wEnd)
+
+        val (mStart, mEnd) = rangeOfScale(ReadingScale.MONTH, null, today)
+        assertEquals(today.withDayOfMonth(1), mStart)
+        assertEquals(today, mEnd)
+
+        val (yStart, yEnd) = rangeOfScale(ReadingScale.YEAR, null, today)
+        assertEquals(today.withDayOfYear(1), yStart)
+        assertEquals(today, yEnd)
+    }
 }

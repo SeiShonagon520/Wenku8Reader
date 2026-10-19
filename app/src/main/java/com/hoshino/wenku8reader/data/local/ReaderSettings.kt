@@ -52,7 +52,7 @@ data class ReaderSettingsState(
     val clickTurnPage: Boolean = true,         // 侧滑翻页时点按左右翻页
     val hapticsEnabled: Boolean = true,        // 控件点击振动反馈（全局 Indication 注入）
     val hapticsStrength: Int = 50,             // 点击振动强度 0-100（映射到 VibrationEffect 幅度 1-255）
-    val checkUpdatesOnStartup: Boolean = true, // 启动时自动检查更新
+    val checkUpdatesOnStartup: Boolean = false, // 启动时自动检查更新（默认关闭，避免弹出更新弹窗）
     val updateChannel: String = "stable",      // 更新通道："stable"（正式版）| "beta"（测试版）
     val updateSource: String = "github",       // 更新源："github" | "gh_proxy"（镜像）
     val appLanguage: String = "system",        // 界面语言："system" | "zh-CN" | "zh-TW"
@@ -74,8 +74,8 @@ data class ReaderSettingsState(
         /** 默认主站镜像（单一来源：[Wenku8Hosts.DEFAULT_BASE]；用户可在设置页「网络」切换）。 */
         const val DEFAULT_MIRROR = Wenku8Hosts.DEFAULT_BASE
 
-        /** 旧版本默认值，用于迁移：未手动改过主域的用户自动切到新默认值。 */
-        const val LEGACY_DEFAULT_MIRROR = "https://www.wenku8.net"
+        /** 旧版本默认值，用于迁移：曾使用 wenku8.cc 或已失效域名的用户自动切到新活动主域。 */
+        const val LEGACY_DEFAULT_MIRROR = "https://www.wenku8.cc"
     }
 }
 
@@ -127,6 +127,8 @@ private object Keys {
     val rightPadding = intPreferencesKey("pad_right")
     // 一次性迁移标记；置位后不再读旧 SharedPreferences。
     val migrated = booleanPreferencesKey("migrated_from_prefs")
+    // 迁移至高速无盾镜像 wenku8.cc 的标记
+    val mirrorMigratedV2 = booleanPreferencesKey("mirror_migrated_v2")
 }
 
 /** 旧版设置所在的 SharedPreferences 文件（迁移来源；迁移后只作降级兜底保留在磁盘上）。 */
@@ -202,6 +204,15 @@ class ReaderSettings(context: Context, private val scope: CoroutineScope) {
                 prefs[Keys.migrated] = true
             }
         }
+        if (dataStore.data.first()[Keys.mirrorMigratedV2] != true) {
+            dataStore.edit { prefs ->
+                val cur = prefs[Keys.primaryMirror]
+                if (cur == "https://www.wenku8.net" || cur == "https://www.wenku8.com" || cur == null) {
+                    prefs[Keys.primaryMirror] = ReaderSettingsState.DEFAULT_MIRROR
+                }
+                prefs[Keys.mirrorMigratedV2] = true
+            }
+        }
         return dataStore.data.first().toState()
     }
 
@@ -232,9 +243,9 @@ class ReaderSettings(context: Context, private val scope: CoroutineScope) {
             dynamicColor = legacyPrefs.getBoolean("dynamic_color", true),
             seedColor = legacyPrefs.getLong("seed_color", 0xFF3F5BA9L),
             amoled = legacyPrefs.getBoolean("amoled", false),
-            // 默认 wenku8.cc；旧默认 wenku8.net（用户未手动改过）自动迁移到新默认
+            // 默认 wenku8.cc；失效的 wenku8.com 自动迁移到新默认
             primaryMirror = legacyPrefs.getString("primary_mirror", null)
-                ?.takeUnless { it == ReaderSettingsState.LEGACY_DEFAULT_MIRROR }
+                ?.takeUnless { it == "https://www.wenku8.com" }
                 ?: ReaderSettingsState.DEFAULT_MIRROR,
             backgroundMode = legacyPrefs.getString("bg_mode", "color") ?: "color",
             // 旧版本只有单一 reader_bg / reader_text_color：迁移为浅色模式配色
@@ -262,7 +273,7 @@ class ReaderSettings(context: Context, private val scope: CoroutineScope) {
             clickTurnPage = legacyPrefs.getBoolean("click_turn", true),
             hapticsEnabled = legacyPrefs.getBoolean("haptics_enabled", true),
             hapticsStrength = legacyPrefs.getInt("haptics_strength", 50).coerceIn(0, 100),
-            checkUpdatesOnStartup = legacyPrefs.getBoolean("check_updates_on_startup", true),
+            checkUpdatesOnStartup = legacyPrefs.getBoolean("check_updates_on_startup", false),
             updateChannel = legacyPrefs.getString("update_channel", "stable") ?: "stable",
             updateSource = legacyPrefs.getString("update_source", "github") ?: "github",
             appLanguage = legacyPrefs.getString("app_language", "system") ?: "system",
@@ -333,7 +344,9 @@ internal fun Preferences.toState(): ReaderSettingsState = ReaderSettingsState(
     dynamicColor = this[Keys.dynamicColor] ?: true,
     seedColor = this[Keys.seedColor] ?: 0xFF3F5BA9L,
     amoled = this[Keys.amoled] ?: false,
-    primaryMirror = this[Keys.primaryMirror] ?: ReaderSettingsState.DEFAULT_MIRROR,
+    primaryMirror = this[Keys.primaryMirror]?.takeUnless {
+        it == "https://www.wenku8.com"
+    } ?: ReaderSettingsState.DEFAULT_MIRROR,
     backgroundMode = this[Keys.backgroundMode] ?: "color",
     readerBackgroundLight = this[Keys.readerBackgroundLight] ?: 0xFFFFFFFFL,
     readerTextColorLight = this[Keys.readerTextColorLight] ?: 0xFF000000L,
@@ -354,7 +367,7 @@ internal fun Preferences.toState(): ReaderSettingsState = ReaderSettingsState(
     hapticsEnabled = this[Keys.hapticsEnabled] ?: true,
     // 越界值就地夹紧：非法数据（手工改过文件、旧版本写坏）不该让强度滑块跑飞
     hapticsStrength = (this[Keys.hapticsStrength] ?: 50).coerceIn(0, 100),
-    checkUpdatesOnStartup = this[Keys.checkUpdatesOnStartup] ?: true,
+    checkUpdatesOnStartup = this[Keys.checkUpdatesOnStartup] ?: false,
     updateChannel = this[Keys.updateChannel] ?: "stable",
     updateSource = this[Keys.updateSource] ?: "github",
     appLanguage = this[Keys.appLanguage] ?: "system",

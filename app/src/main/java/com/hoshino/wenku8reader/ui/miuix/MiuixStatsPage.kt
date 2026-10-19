@@ -47,6 +47,7 @@ import com.hoshino.wenku8reader.ui.stats.HeatmapDay
 import com.hoshino.wenku8reader.ui.stats.ReadingScale
 import com.hoshino.wenku8reader.ui.stats.ReadingStatsUiState
 import com.hoshino.wenku8reader.ui.stats.ReadingStatsViewModel
+import com.hoshino.wenku8reader.ui.stats.ReadingTrendChart
 import java.time.DayOfWeek
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
@@ -115,7 +116,12 @@ fun MiuixStatsPage(
                     ) {
                     Spacer(Modifier.height(4.dp))
                     MiuixSummaryRow(ui)
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(12.dp))
+
+                    // 现代趋势图表：动态平滑贝塞尔走势（Vico 驱动）
+                    ReadingTrendChart(ui = ui)
+                    Spacer(Modifier.height(12.dp))
+
                     MiuixHeatmapGrid(ui, onSelect = vm::selectDay)
                     Spacer(Modifier.height(8.dp))
                     MiuixHeatmapLegend()

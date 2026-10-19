@@ -1,15 +1,25 @@
 package com.hoshino.wenku8reader.data
 
+import android.app.Activity
 import android.content.Context
+import android.util.Log
+import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.JsResult
 import android.webkit.ValueCallback
+import com.hoshino.wenku8reader.Wenku8Application
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -132,7 +142,7 @@ class Wenku8Client(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
         private val GB18030: Charset = Charset.forName("GB18030")
-        private val RATE_CODES = setOf(403, 429, 500, 502, 503, 504)
+        private val RATE_CODES = setOf(429, 500, 502, 503, 504)
 
         /** 登录页特征串：命中说明拿到的是登录页而非目标内容（不缓存、视为无效）。 */
         private const val LOGIN_PATH = "login.php"
@@ -152,16 +162,16 @@ class Wenku8Client(
         private val BOOK_URL = Regex("/book/(\\d+)\\.htm")
 
         /** Cronet 请求等待上限（秒）；超时后 cancel 并返回 null。 */
-        private const val CRONET_TIMEOUT_SECONDS = 8L
+        private const val CRONET_TIMEOUT_SECONDS = 4L
 
         /** 单个隐藏 WebView 解挑战的等待上限（毫秒）。 */
-        private const val WEBVIEW_TIMEOUT_MS = 15_000L
+        private const val WEBVIEW_TIMEOUT_MS = 6_000L
 
         /**
          * 等待 WebView 互斥锁的上限（毫秒）：比单个 WebView 的超时更长，
          * 保证"排队 + 执行"整体有界，排队的请求不会无限期挂着。
          */
-        private const val WEBVIEW_LOCK_TIMEOUT_MS = 25_000L
+        private const val WEBVIEW_LOCK_TIMEOUT_MS = 8_000L
 
         // ---- 磁盘缓存 TTL（见 HtmlDiskCache）----
         const val TTL_HOME = 60L * 60 * 1000                 // 首页 1 小时
@@ -204,6 +214,30 @@ class Wenku8Client(
             return "Mozilla/5.0 (Linux; Android ${os.random()}; ${device.random()}) " +
                 "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$chrome.0.$minor.$build Mobile Safari/537.$patch"
         }
+
+        /** 检查文库8/Jieqi CMS 返回的文本中是否包含凭据认证错误 */
+        private fun extractCredentialError(content: String): String? {
+            val s = content
+            return when {
+                s.contains("用户名或密码错误") || s.contains("用户名和密码不匹配") || s.contains("用户名与密码不匹配") ->
+                    "用户名或密码错误，请检查后重新输入"
+                s.contains("密码错误") || s.contains("密码不正确") ->
+                    "密码错误，请检查后重新输入"
+                s.contains("该用户不存在") || s.contains("用户不存在") || s.contains("用户名不存在") ->
+                    "该用户名不存在，请检查账号拼写"
+                s.contains("验证码错误") || s.contains("请输入验证码") || s.contains("验证码不正确") ->
+                    "触发站点验证码保护，请稍后重试或在网页端先完成验证"
+                s.contains("账号已被锁定") || s.contains("账号已被封禁") || s.contains("禁止访问") ->
+                    "该账号已被文库8站点限制访问"
+                s.contains("两次登录尝试间隔") || s.contains("登录过于频繁") ->
+                    "登录尝试过于频繁，请稍候 5 秒后再试"
+                s.contains("您的 IP 暂时被禁止") ->
+                    "当前网络 IP 被站点临时限制，请切换网络或稍后重试"
+                s.contains("登录失败") ->
+                    "登录失败，请检查账号密码"
+                else -> null
+            }
+        }
     }
 
     // ------------------------------------------------------------------ //
@@ -235,20 +269,100 @@ class Wenku8Client(
 
     private val base: String get() = mirrors.first()
 
+    private val networkPrefs by lazy {
+        appContext.getSharedPreferences("wenku8_network", Context.MODE_PRIVATE)
+    }
+
+    /** 统一系统真实 WebView UserAgent，确保 OkHttp、Cronet 与 WebView 拥有 100% 一致的浏览器指纹。 */
+    private val systemDefaultUa: String by lazy {
+        runCatching {
+            WebSettings.getDefaultUserAgent(appContext)
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: UA
+    }
+
     /**
-     * WebView 解出 Cloudflare 挑战时使用的 UA（按主机记录）。
+     * WebView 解出 Cloudflare 挑战时使用的 UA（按主机记录持久化到 SharedPreferences）。
      * cf_clearance 令牌与该 UA 绑定，后续 OkHttp/Cronet 复用令牌时必须使用同一 UA。
      */
     private val challengeUa = java.util.concurrent.ConcurrentHashMap<String, String>()
 
-    private fun uaFor(url: String): String =
-        runCatching { url.toHttpUrl().host }.getOrNull()?.let { challengeUa[it] }
-            ?: randomAndroidUa()
+    private fun uaFor(url: String): String {
+        val host = runCatching { url.toHttpUrl().host }.getOrNull() ?: return systemDefaultUa
+        return challengeUa[host]
+            ?: networkPrefs.getString("ua_$host", null)
+            ?: systemDefaultUa
+    }
+
+    private fun recordChallengeUa(host: String, ua: String) {
+        if (host.isNotBlank() && ua.isNotBlank()) {
+            challengeUa[host] = ua
+            runCatching { networkPrefs.edit().putString("ua_$host", ua).apply() }
+        }
+    }
 
     /** 切换主镜像/清空会话时调用：清空全部 Cookie 与 UA 绑定。 */
     fun clearCookies() {
         challengeUa.clear()
+        runCatching { networkPrefs.edit().clear().apply() }
         cookieStore.clear()
+    }
+
+    /**
+     * 仅清空用户登录态 Cookie，保留 Cloudflare 挑战令牌（cf_clearance 等）与绑定的 UA。
+     * 在登录/切换账号时调用，避免重跑耗时的 Cloudflare 挑战。
+     */
+    fun clearUserSession() {
+        val baseHttp = runCatching { base.toHttpUrl() }.getOrNull()
+        if (baseHttp != null) {
+            val list = cookieStore.loadForRequest(baseHttp)
+            val keep = list.filter {
+                it.name.startsWith("cf_", ignoreCase = true) ||
+                    it.name.startsWith("__cf", ignoreCase = true) ||
+                    it.name.startsWith("_cf", ignoreCase = true)
+            }
+            cookieStore.clear()
+            for (c in keep) {
+                cookieStore.saveRaw(baseHttp, "${c.name}=${c.value}")
+            }
+            cookieStore.persist()
+        }
+        runCatching {
+            val cm = CookieManager.getInstance()
+            cm.setCookie(base, "jieqiUserInfo=; Max-Age=0; Path=/")
+            cm.setCookie(base, "jieqiUserId=; Max-Age=0; Path=/")
+            cm.setCookie(base, "jieqiUserName=; Max-Age=0; Path=/")
+            cm.setCookie(base, "PHPSESSID=; Max-Age=0; Path=/")
+            cm.flush()
+        }
+    }
+
+    private fun syncCookiesToWebView(targetUrl: String) {
+        runCatching {
+            val httpUrl = targetUrl.toHttpUrl()
+            val list = cookieStore.loadForRequest(httpUrl)
+            if (list.isEmpty()) return
+            val cm = CookieManager.getInstance()
+            cm.setAcceptCookie(true)
+            for (c in list) {
+                cm.setCookie(targetUrl, "${c.name}=${c.value}; Path=/")
+            }
+            cm.flush()
+        }
+    }
+
+    private fun syncCookiesFromWebView(targetUrl: String) {
+        runCatching {
+            val cm = CookieManager.getInstance()
+            val raw = cm.getCookie(targetUrl) ?: ""
+            if (raw.isNotBlank()) {
+                cookieStore.saveRaw(targetUrl.toHttpUrl(), raw)
+            }
+            val baseRaw = cm.getCookie(base) ?: ""
+            if (baseRaw.isNotBlank()) {
+                cookieStore.saveRaw(base.toHttpUrl(), baseRaw)
+            }
+            cookieStore.persist()
+        }
     }
 
     // ------------------------------------------------------------------ //
@@ -288,6 +402,11 @@ class Wenku8Client(
         while (true) {
             pacer.pace()
             val resp = withContext(Dispatchers.IO) { okHttp.newCall(req).execute() }
+            if (resp.code == 403) {
+                pacer.adjust(ok = false)
+                resp.close()
+                throw IOException("请求被拦截(HTTP 403)")
+            }
             if (resp.code in RATE_CODES) {
                 pacer.adjust(ok = false)
                 if (attempt < retries) {
@@ -333,10 +452,11 @@ class Wenku8Client(
         return this
     }
 
-    private suspend fun getBytes(url: String, retries: Int = 3, ua: String = UA): ByteArray {
+    private suspend fun getBytes(url: String, retries: Int = 3, ua: String? = null): ByteArray {
+        val usedUa = ua ?: uaFor(url)
         val req = Request.Builder()
             .url(url)
-            .browserHeaders(refererFor(url), ua)
+            .browserHeaders(refererFor(url), usedUa)
             .build()
         return readBytes(execute(req, retries))
     }
@@ -348,7 +468,7 @@ class Wenku8Client(
     }.getOrNull()
 
     /** Fetches a page and decodes it as GB18030 on the IO dispatcher. */
-    private suspend fun getHtml(url: String, retries: Int = 3, ua: String = UA): String =
+    private suspend fun getHtml(url: String, retries: Int = 3, ua: String? = null): String =
         withContext(Dispatchers.IO) {
             val bytes = getBytes(url, retries, ua)
             String(bytes, GB18030)
@@ -364,10 +484,11 @@ class Wenku8Client(
         ttlMs: Long,
         category: String = "other",
         retries: Int = 3,
-        ua: String = UA,
+        ua: String? = null,
     ): String {
+        val usedUa = ua ?: uaFor(url)
         htmlCache.get(url, ttlMs, category)?.let { return it }
-        val html = getHtml(url, retries, ua)
+        val html = getHtml(url, retries, usedUa)
         if (html.isNotBlank() && !isChallenge(html) && !html.contains(LOGIN_PATH)) {
             // 写入前同步用户配置的缓存上限（动态生效）
             htmlCache.setMaxBytes(cacheMaxMbProvider().toLong() * 1024 * 1024)
@@ -419,7 +540,7 @@ class Wenku8Client(
     private suspend fun postForm(url: String, pairs: List<Pair<String, String>>): Response {
         val req = Request.Builder()
             .url(url)
-            .browserHeaders("$base/login.php")
+            .browserHeaders(refererFor(url) ?: "$base/login.php", uaFor(url))
             .post(gbkForm(pairs))
             .build()
         return execute(req, retries = 2)
@@ -433,6 +554,12 @@ class Wenku8Client(
     private fun hasSession(): Boolean =
         cookieStore.loadForRequest(base.toHttpUrl()).any {
             it.name == "jieqiUserInfo" && it.value.isNotBlank()
+        }
+
+    /** 是否已取得 Cloudflare 验证令牌（cf_clearance）。 */
+    private fun hasCfClearance(): Boolean =
+        cookieStore.loadForRequest(base.toHttpUrl()).any {
+            it.name == "cf_clearance" && it.value.isNotBlank()
         }
 
     suspend fun isLoggedIn(): Boolean = withContext(Dispatchers.IO) { hasSession() }
@@ -450,35 +577,284 @@ class Wenku8Client(
         return loginMutex.withLock {
             if (isLoggedIn()) return@withLock true
             val creds = defaultCredentials() ?: return@withLock false
-            loginInternal(creds.first, creds.second)
+            loginInternal(creds.first, creds.second).success
         }
     }
 
-    /** 显式登录（切换镜像后重登等）；与 [ensureLoggedIn] 共用同一把锁，避免并发重复登录。 */
-    suspend fun login(user: String, pass: String): Boolean =
-        loginMutex.withLock { loginInternal(user, pass) }
+    /** 显式登录（切换镜像/登录个人账号等）；与 [ensureLoggedIn] 共用同一把锁，先清理旧会话再登录。 */
+    suspend fun login(user: String, pass: String): LoginResult =
+        loginMutex.withLock {
+            clearUserSession()
+            val result = loginInternal(user, pass)
+            if (result.success) {
+                cookieStore.persist()
+            }
+            result
+        }
 
-    private suspend fun loginInternal(user: String, pass: String): Boolean =
+    private suspend fun loginInternal(user: String, pass: String): LoginResult =
         withContext(Dispatchers.IO) {
-        val resp = postForm(
-            "$base/login.php?do=submit" +
-                "&jumpurl=${URLEncoder.encode("$base/index.php", "UTF-8")}",
-            listOf(
-                "username" to user,
-                "password" to pass,
-                "usecookie" to "315360000",
-                "action" to "login",
-                "submit" to "\u00A0\u00A0\u767B\u00A0\u00A0\u5F55\u00A0",
-            )
-        )
-        readBytes(resp)
-        // 成功与否以是否拿到 jieqiUserInfo 会话 Cookie 为准
-        val ok = hasSession()
-        if (ok) {
-            cookieStore.persist()
+            // 1. 若已有 cf_clearance，优先尝试 OkHttp 快速登录
+            val directResult = runCatchingNotCancelling {
+                val resp = postForm(
+                    "$base/login.php?do=submit" +
+                        "&jumpurl=${URLEncoder.encode("$base/index.php", "UTF-8")}",
+                    listOf(
+                        "username" to user,
+                        "password" to pass,
+                        "usecookie" to "315360000",
+                        "action" to "login",
+                        "submit" to "\u00A0\u00A0\u767B\u00A0\u00A0\u5F55\u00A0",
+                    )
+                )
+                val bodyText = readBytes(resp).toString(GB18030)
+                Log.d("Wenku8Login", "direct login resp code=${resp.code}, bodyLen=${bodyText.length}")
+                val credentialError = extractCredentialError(bodyText)
+                if (credentialError != null) {
+                    return@runCatchingNotCancelling LoginResult(false, credentialError)
+                }
+                if (hasSession()) {
+                    cookieStore.persist()
+                    return@runCatchingNotCancelling LoginResult(true, "登录成功")
+                }
+                null
+            }.getOrNull()
+
+            if (directResult != null) {
+                return@withContext directResult
+            }
+
+            // 2. 若直接 POST 遭遇 Cloudflare 403 拦截或无令牌，升级至真实后台 WebView 登录流
+            val wvResult = webViewLogin(user, pass)
+            if (wvResult.success) {
+                cookieStore.persist()
+            }
+            wvResult
         }
-        ok
+
+    /**
+     * 等待并获取前台 Activity（最多等待 1.5 秒），供隐藏 WebView 附着到有效 Window。
+     */
+    private suspend fun getForegroundActivity(): Activity? {
+        var act = Wenku8Application.currentActivity
+        if (act != null && !act.isFinishing && !act.isDestroyed) return act
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < 1500) {
+            delay(100)
+            act = Wenku8Application.currentActivity
+            if (act != null && !act.isFinishing && !act.isDestroyed) return act
+        }
+        return null
     }
+
+    /**
+     * 真实 WebView 登录流：
+     * 用于首次启动无 cf_clearance、或 OkHttp 登录遭遇 Cloudflare 403 时的终极兜底。
+     * 1. 启动 WebView 载入 login.php，自然触发并跑通 Cloudflare 挑战并截获 cf_clearance。
+     * 2. 当登录表单就绪时，注入 JavaScript 自动填入账号密码并触发表单提交。
+     * 3. 登录成功拿到 jieqiUserInfo 后持久化所有 Cookie 与 UA，完成全套会话建立。
+     * 4. 实时侦听 alert 弹窗与页面错误信息，密码/账号错误即时返回，杜绝 15 秒死等。
+     */
+    private suspend fun webViewLogin(user: String, pass: String): LoginResult =
+        withTimeoutOrNull(WEBVIEW_LOCK_TIMEOUT_MS) {
+            webViewMutex.withLock {
+                withTimeoutOrNull(WEBVIEW_TIMEOUT_MS) {
+                    val activity = getForegroundActivity()
+                    withContext(Dispatchers.Main) {
+                        suspendCancellableCoroutine { cont ->
+                            val ctx = activity ?: appContext
+                            val webView = runCatching { WebView(ctx) }.getOrNull()
+                            if (webView == null) {
+                                if (cont.isActive) cont.resume(LoginResult(false, "无法初始化浏览器引擎"))
+                                return@suspendCancellableCoroutine
+                            }
+                            if (activity != null && !activity.isFinishing && !activity.isDestroyed) {
+                                runCatching {
+                                    activity.addContentView(
+                                        webView,
+                                        ViewGroup.LayoutParams(1, 1)
+                                    )
+                                    webView.alpha = 0.99f
+                                    webView.translationX = -5000f
+                                    webView.isClickable = false
+                                    webView.isFocusable = false
+                                }
+                            }
+                            val host = runCatching { base.toHttpUrl().host }.getOrNull()
+                            runCatching {
+                                webView.layout(0, 0, 1080, 1920)
+                                webView.settings.apply {
+                                    javaScriptEnabled = true
+                                    domStorageEnabled = true
+                                    databaseEnabled = true
+                                    useWideViewPort = true
+                                    loadWithOverviewMode = true
+                                    cacheMode = WebSettings.LOAD_DEFAULT
+                                }
+                                var detectedError: String? = null
+                                webView.webChromeClient = object : WebChromeClient() {
+                                    override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+                                        result?.confirm()
+                                        if (!message.isNullOrBlank()) {
+                                            val err = extractCredentialError(message) ?: message
+                                            detectedError = err
+                                        }
+                                        return true
+                                    }
+                                }
+                                val usedUa = systemDefaultUa
+                                webView.settings.userAgentString = usedUa
+                                CookieManager.getInstance().setAcceptCookie(true)
+                                CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
+                                syncCookiesToWebView("$base/login.php")
+
+                                var resumed = false
+                                fun finishSuccess() {
+                                    if (resumed) return
+                                    resumed = true
+                                    syncCookiesFromWebView(base)
+                                    syncCookiesFromWebView("$base/login.php")
+                                    if (host != null) recordChallengeUa(host, usedUa)
+                                    destroyWebView(webView)
+                                    if (cont.isActive) cont.resume(LoginResult(true, "登录成功"))
+                                }
+
+                                fun finishFailure(msg: String) {
+                                    if (resumed) return
+                                    resumed = true
+                                    syncCookiesFromWebView(base)
+                                    syncCookiesFromWebView("$base/login.php")
+                                    if (host != null) recordChallengeUa(host, usedUa)
+                                    destroyWebView(webView)
+                                    if (cont.isActive) cont.resume(LoginResult(false, msg))
+                                }
+
+                                webView.webViewClient = object : WebViewClient() {
+                                    override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                                        val errorCode = error?.errorCode ?: 0
+                                        if (errorCode == -3) return // net::ERR_ABORTED
+                                        if (request != null && !request.isForMainFrame) return
+                                    }
+                                }
+
+                                Log.d("Wenku8Debug", "webViewLogin: starting for $base/login.php, UA=$usedUa")
+                                val pollScope = CoroutineScope(Dispatchers.Main)
+                                val pollJob = pollScope.launch {
+                                    val start = System.currentTimeMillis()
+                                    var formSubmitted = false
+                                    while (isActive && System.currentTimeMillis() - start < WEBVIEW_TIMEOUT_MS) {
+                                        delay(500)
+                                        if (resumed) break
+                                        if (detectedError != null) {
+                                            finishFailure(detectedError ?: "登录失败")
+                                            break
+                                        }
+                                        syncCookiesFromWebView(base)
+                                        syncCookiesFromWebView("$base/login.php")
+                                        val wvCookies = runCatching { CookieManager.getInstance().getCookie("$base/login.php") }.getOrNull() ?: ""
+                                        Log.d("Wenku8Debug", "webViewLogin poll: cookies=$wvCookies, formSubmitted=$formSubmitted")
+                                        if (wvCookies.contains("cf_clearance") && host != null) {
+                                            recordChallengeUa(host, usedUa)
+                                        }
+                                        if (wvCookies.contains("jieqiUserInfo")) {
+                                            Log.d("Wenku8Debug", "webViewLogin: found jieqiUserInfo! SUCCESS!")
+                                            finishSuccess()
+                                            break
+                                        }
+
+                                        // 若当前登录表单可见且尚未提交，通过 JS 填充账号密码并提交表单
+                                        if (!formSubmitted) {
+                                            val js = """
+                                                (function() {
+                                                    try {
+                                                        var u = document.querySelector('input[name="username"]') || 
+                                                                document.querySelector('input[type="text"]') ||
+                                                                document.querySelector('#username');
+                                                        var p = document.querySelector('input[name="password"]') || 
+                                                                document.querySelector('input[type="password"]') ||
+                                                                document.querySelector('#password');
+                                                        if (u && p) {
+                                                            u.value = '${user.replace("'", "\\'")}';
+                                                            p.value = '${pass.replace("'", "\\'")}';
+                                                            u.dispatchEvent(new Event('input', { bubbles: true }));
+                                                            u.dispatchEvent(new Event('change', { bubbles: true }));
+                                                            p.dispatchEvent(new Event('input', { bubbles: true }));
+                                                            p.dispatchEvent(new Event('change', { bubbles: true }));
+                                                            var uc = document.querySelector('input[name="usecookie"]');
+                                                            if (uc) uc.checked = true;
+                                                            var submitBtn = document.querySelector('input[type="submit"]') || 
+                                                                            document.querySelector('button[type="submit"]') ||
+                                                                            document.querySelector('input[name="submit"]');
+                                                            if (submitBtn) {
+                                                                submitBtn.click();
+                                                                return "clicked";
+                                                            }
+                                                            var form = u.form || document.querySelector('form');
+                                                            if (form) {
+                                                                if (typeof form.requestSubmit === 'function') {
+                                                                    form.requestSubmit();
+                                                                    return "request_submitted";
+                                                                }
+                                                                HTMLFormElement.prototype.submit.call(form);
+                                                                return "proto_submitted";
+                                                            }
+                                                        }
+                                                    } catch(e) {
+                                                        return "err:" + e.message;
+                                                    }
+                                                    return "no_form";
+                                                })()
+                                            """.trimIndent()
+                                            webView.evaluateJavascript(js) { res ->
+                                                Log.e("Wenku8Debug", "webViewLogin JS result: $res")
+                                                if (res != null && (res.contains("clicked") || res.contains("submitted"))) {
+                                                    formSubmitted = true
+                                                }
+                                            }
+                                        } else {
+                                            // 表单提交后，快速检测页面是否渲染了错误提示
+                                            val jsCheck = """
+                                                (function() {
+                                                    try {
+                                                        var b = document.body ? document.body.innerText : '';
+                                                        return b;
+                                                    } catch(e) { return ''; }
+                                                })()
+                                            """.trimIndent()
+                                            webView.evaluateJavascript(jsCheck) { pageText ->
+                                                if (!pageText.isNullOrBlank()) {
+                                                    val err = extractCredentialError(pageText)
+                                                    if (err != null) {
+                                                        detectedError = err
+                                                    }
+                                                }
+                                            }
+                                            if (detectedError != null) {
+                                                finishFailure(detectedError ?: "用户名或密码错误")
+                                                break
+                                            }
+                                        }
+                                    }
+                                    if (!resumed) {
+                                        finishFailure(detectedError ?: "登录超时，请检查网络或账号密码")
+                                    }
+                                }
+
+                                cont.invokeOnCancellation {
+                                    pollJob.cancel()
+                                    webView.post { destroyWebView(webView) }
+                                }
+
+                                webView.loadUrl("$base/login.php")
+                            }.onFailure {
+                                destroyWebView(webView)
+                                if (cont.isActive) cont.resume(LoginResult(false, it.message ?: "登录异常"))
+                            }
+                        }
+                    }
+                } ?: LoginResult(false, "登录超时，请重试")
+            }
+        } ?: LoginResult(false, "登录排队超时，请重试")
 
     // 说明：这里**没有** logout()。本应用全程使用内置共享账号、不提供退出入口，
     // 原先的 logout() 在全仓已无任何调用点（清除会话统一走 clearCookies()），
@@ -495,24 +871,32 @@ class Wenku8Client(
             // 长时间挂起且协程取消无法从递归中恢复。这里改为定长循环。
             repeat(SEARCH_MAX_ATTEMPTS) { attempt ->
                 pacer.paceSearch()
-                val resp = postForm(
-                    "$base/so.php",
-                    listOf(
-                        "searchtype" to type,
-                        "searchkey" to keyword,
-                        "charset" to "gbk",
-                        "Submit" to "\u8F7B\u5C0F\u8BF4\u641C\u7D22",
+                val resp = runCatching {
+                    postForm(
+                        "$base/so.php",
+                        listOf(
+                            "searchtype" to type,
+                            "searchkey" to keyword,
+                            "charset" to "gbk",
+                            "Submit" to "\u8F7B\u5C0F\u8BF4\u641C\u7D22",
+                        )
                     )
-                )
-                val finalUrl = resp.request.url.toString()
-                val html = String(readBytes(resp), GB18030)
-                val throttled = html.contains(THROTTLE_MARK) || html.contains("出现错误")
-                if (!throttled) {
-                    return@withContext parseSearchResult(finalUrl, html)
+                }.getOrNull()
+                if (resp != null) {
+                    val finalUrl = resp.request.url.toString()
+                    val html = String(readBytes(resp), GB18030)
+                    val throttled = html.contains(THROTTLE_MARK) || html.contains("出现错误")
+                    if (!throttled && !isChallenge(html)) {
+                        return@withContext parseSearchResult(finalUrl, html)
+                    }
+                }
+                // 若无有效响应或遭 CF 拦截，触发一次主页绕过获取 cf_clearance
+                if (attempt == 0) {
+                    runCatching { fetchWithBypass({ "$it/index.php" }, { it }) }
                 }
                 if (attempt < SEARCH_MAX_ATTEMPTS - 1) delay(SEARCH_RETRY_DELAY_MS)
             }
-            throw IOException("搜索被站点限流，请稍后重试")
+            throw IOException("搜索被站点限流或人机验证阻断，请稍后重试")
         }
 
     /** 搜索响应解析：既可能是精确命中（302 直跳详情页），也可能是结果列表页。 */
@@ -531,18 +915,27 @@ class Wenku8Client(
         // 同键并发只放行一个：排队者拿到锁时缓存已写好，不会再发一次请求
         singleFlight.run("info_$id") {
             infoCache.get("info_$id") ?: run {
-                // 网页优先（含磁盘缓存 + cf_clearance 快路径）；失败/空则走官方 App API（免 CF）
-                val web = runCatchingNotCancelling {
-                    Parsers.parseBookInfo(
-                        getHtmlCached("$base/book/$id.htm", TTL_BOOK, "book"),
-                        id,
+                // 1. 快路径：多镜像自动轮询 + 本地磁盘缓存
+                val web = tryDirect(
+                    urlFor = { h -> "$h/book/$id.htm" },
+                    parse = { html -> Parsers.parseBookInfo(html, id).takeIf { it.title.isNotBlank() } },
+                    ttlMs = TTL_BOOK,
+                    category = "book",
+                )
+                // 2. 直连遇 CF 拦截/无令牌：升级至三级绕过栈（Cronet -> 后台 WebView 解挑战 -> OkHttp）
+                    ?: fetchWithBypass(
+                        urlFor = { h -> "$h/book/$id.htm" },
+                        parse = { html ->
+                            Parsers.parseBookInfo(html, id).takeIf { it.title.isNotBlank() }?.also {
+                                htmlCache.put("$base/book/$id.htm", html, "book")
+                            }
+                        },
                     )
-                }.getOrNull()
-                val info = web?.takeIf { it.title.isNotBlank() }
+                // 3. 官方 App API 兜底
                     ?: appApiBookInfo(id)
                     ?: throw IOException("书籍信息获取失败")
-                infoCache.put("info_$id", info)
-                info
+                infoCache.put("info_$id", web)
+                web
             }
         }
     }
@@ -550,16 +943,27 @@ class Wenku8Client(
     suspend fun chapters(bookId: Int, groupId: Int): List<Volume> = withContext(Dispatchers.IO) {
         singleFlight.run("toc_$bookId") {
             tocCache.get("toc_$bookId") ?: run {
-                val web = runCatchingNotCancelling {
-                    Parsers.parseChapterIndex(
-                        getHtmlCached("$base/novel/$groupId/$bookId/index.htm", TTL_BOOK, "book")
+                // 1. 快路径：多镜像自动轮询 + 本地磁盘缓存
+                val web = tryDirect(
+                    urlFor = { h -> "$h/novel/$groupId/$bookId/index.htm" },
+                    parse = { html -> Parsers.parseChapterIndex(html).takeIf { it.isNotEmpty() } },
+                    ttlMs = TTL_BOOK,
+                    category = "book",
+                )
+                // 2. 直连遇 CF 拦截/无令牌：升级至三级绕过栈
+                    ?: fetchWithBypass(
+                        urlFor = { h -> "$h/novel/$groupId/$bookId/index.htm" },
+                        parse = { html ->
+                            Parsers.parseChapterIndex(html).takeIf { it.isNotEmpty() }?.also {
+                                htmlCache.put("$base/novel/$groupId/$bookId/index.htm", html, "book")
+                            }
+                        },
                     )
-                }.getOrNull()
-                val volumes = web?.takeIf { it.isNotEmpty() }
+                // 3. 官方 App API 兜底
                     ?: appApiVolumes(bookId)
                     ?: throw IOException("章节目录加载失败")
-                tocCache.put("toc_$bookId", volumes)
-                volumes
+                tocCache.put("toc_$bookId", web)
+                web
             }
         }
     }
@@ -569,16 +973,27 @@ class Wenku8Client(
             // 按 bookId+cid 分键：同一章的并发请求合并，不同章节照旧并行
             singleFlight.run("chap_${bookId}_$cid") {
                 chapterCache.get("chap_${bookId}_$cid") ?: run {
-                    val web = runCatchingNotCancelling {
-                        Parsers.parseChapter(
-                            getHtmlCached("$base/novel/$gid/$bookId/$cid.htm", TTL_CHAPTER, "chapter")
+                    // 1. 快路径：多镜像自动轮询 + 本地磁盘缓存
+                    val web = tryDirect(
+                        urlFor = { h -> "$h/novel/$gid/$bookId/$cid.htm" },
+                        parse = { html -> Parsers.parseChapter(html).takeIf { it.text.isNotBlank() || it.images.isNotEmpty() } },
+                        ttlMs = TTL_CHAPTER,
+                        category = "chapter",
+                    )
+                    // 2. 直连遇 CF 拦截/无令牌：升级至三级绕过栈
+                        ?: fetchWithBypass(
+                            urlFor = { h -> "$h/novel/$gid/$bookId/$cid.htm" },
+                            parse = { html ->
+                                Parsers.parseChapter(html).takeIf { it.text.isNotBlank() || it.images.isNotEmpty() }?.also {
+                                    htmlCache.put("$base/novel/$gid/$bookId/$cid.htm", html, "chapter")
+                                }
+                            },
                         )
-                    }.getOrNull()
-                    val chapter = web?.takeIf { it.text.isNotBlank() || it.images.isNotEmpty() }
+                    // 3. 官方 App API 兜底
                         ?: appApiChapter(bookId, cid)
                         ?: throw IOException("章节加载失败")
-                    chapterCache.put("chap_${bookId}_$cid", chapter)
-                    chapter
+                    chapterCache.put("chap_${bookId}_$cid", web)
+                    web
                 }
             }
         }
@@ -650,7 +1065,39 @@ class Wenku8Client(
     }
 
     suspend fun bookcase(): List<BookcaseItem> = withContext(Dispatchers.IO) {
-        Parsers.parseBookcase(getHtml("$base/modules/article/bookcase.php"))
+        val allItems = mutableListOf<BookcaseItem>()
+        val seenAids = mutableSetOf<Int>()
+
+        // 支持文库8云端书架多页抓取（?page=1..10）
+        for (page in 1..10) {
+            val path = if (page == 1) "modules/article/bookcase.php" else "modules/article/bookcase.php?page=$page"
+            val html = runCatchingNotCancelling {
+                getHtml("$base/$path")
+            }.getOrNull()?.takeIf { !it.contains(LOGIN_PATH) && !it.contains("Just a moment...") }
+                ?: fetchWithBypass(
+                    urlFor = { h -> "$h/$path" },
+                    parse = { it.takeIf { text -> !text.contains("Just a moment...") && !text.contains(LOGIN_PATH) } }
+                )
+
+            if (html.isNullOrBlank()) break
+
+            val pageItems = Parsers.parseBookcase(html)
+            if (pageItems.isEmpty()) break
+
+            var addedOnThisPage = 0
+            for (item in pageItems) {
+                if (item.aid > 0 && seenAids.add(item.aid)) {
+                    allItems.add(item)
+                    addedOnThisPage++
+                }
+            }
+            // 若整页均为重复项，或者该页书籍数量较少（如少于 10 本），或不包含下一页链接，停止继续拉取
+            val hasNextPage = html.contains("page=${page + 1}") || html.contains("page=" + (page + 1))
+            if (addedOnThisPage == 0 || !hasNextPage || pageItems.size < 10) {
+                break
+            }
+        }
+        allItems
     }
 
     /**
@@ -659,19 +1106,50 @@ class Wenku8Client(
      * WebView → Cronet → OkHttp 随机 UA 的三级 Cloudflare 绕过栈。
      */
     suspend fun homepage(): List<HomeSection> = withContext(Dispatchers.IO) {
-        // 快路径：cf_clearance cookie-first 逐镜像直连（磁盘缓存 1 小时，避免二次加载）
+        // 首页需要有效登录态（未登录访问 index.php 会 302 重定向到 login.php 导致解析为空）
+        if (!isLoggedIn()) {
+            ensureLoggedIn()
+        }
         tryDirect(
             urlFor = { h -> "$h/index.php" },
             parse = { html -> Parsers.parseHomepage(html).takeIf { it.isNotEmpty() } },
             ttlMs = TTL_HOME,
             category = "home",
-        )?.let { return@withContext it }
+        )?.let {
+            Log.d("Wenku8Debug", "homepage: tryDirect succeeded with ${it.size} sections")
+            return@withContext it
+        }
 
+        Log.d("Wenku8Debug", "homepage: tryDirect failed, entering fetchWithBypass")
         val sections = fetchWithBypass(
             urlFor = { h -> "$h/index.php" },
             parse = { html -> Parsers.parseHomepage(html).takeIf { it.isNotEmpty() } },
         )
-        sections ?: throw IOException("首页获取失败：直连与三级绕过均未命中")
+        if (sections != null && sections.isNotEmpty()) {
+            Log.d("Wenku8Debug", "homepage: fetchWithBypass result=${sections.size}")
+            return@withContext sections
+        }
+
+        // 兜底方案：从热门分类书单聚合成首页栏目展示
+        val fallback = buildFallbackHomeSections()
+        if (fallback.isNotEmpty()) {
+            Log.d("Wenku8Debug", "homepage: buildFallbackHomeSections result=${fallback.size}")
+            return@withContext fallback
+        }
+
+        throw IOException("首页获取失败：直连与三级绕过均未命中")
+    }
+
+    private suspend fun buildFallbackHomeSections(): List<HomeSection> = withContext(Dispatchers.IO) {
+        val fallbackTags = listOf("轻小说", "热血", "恋爱", "奇幻", "冒险")
+        val sections = mutableListOf<HomeSection>()
+        for (tag in fallbackTags) {
+            val books = runCatching { tagBooks(tag, page = 1) }.getOrNull()
+            if (!books.isNullOrEmpty()) {
+                sections.add(HomeSection(title = tag, books = books.take(8)))
+            }
+        }
+        sections
     }
 
     /**
@@ -699,9 +1177,13 @@ class Wenku8Client(
         ) ?: emptyList()
     }
 
-    private fun isChallenge(html: String): Boolean =
-        html.contains("challenge-platform") || html.contains("cf-challenge") ||
-            html.contains("cf_chl") || html.contains("cf-chl")
+    private fun isChallenge(html: String): Boolean {
+        if (html.contains("wenku8") || html.contains("轻小说文库")) return false
+        return html.contains("Just a moment", ignoreCase = true) ||
+            html.contains("window._cf_chl_opt") ||
+            html.contains("challenge-error-text") ||
+            html.contains("cf-challenge")
+    }
 
     /**
      * `runCatching` 的同义封装：**不吞协程取消**。
@@ -754,16 +1236,16 @@ class Wenku8Client(
         urlFor: (String) -> String,
         parse: (String) -> T?,
     ): T? {
-        for (h in mirrors) {
-            val html = webViewGet(urlFor(h)) ?: continue
-            parse(html)?.let { return it }
-        }
         val engine = cronetEngine
         if (engine != null) {
             for (h in mirrors) {
                 val html = cronetGet(engine, urlFor(h)) ?: continue
                 parse(html)?.let { return it }
             }
+        }
+        for (h in mirrors) {
+            val html = webViewGet(urlFor(h)) ?: continue
+            parse(html)?.let { return it }
         }
         for (h in mirrors) {
             // 若该主机已有 cf_clearance（WebView 解出后持久化），复用其绑定 UA 直接通过
@@ -883,67 +1365,67 @@ class Wenku8Client(
         withTimeoutOrNull(WEBVIEW_LOCK_TIMEOUT_MS) {
             webViewMutex.withLock {
                 withTimeoutOrNull(WEBVIEW_TIMEOUT_MS) {
+                    val activity = getForegroundActivity()
                     withContext(Dispatchers.Main) {
                         suspendCancellableCoroutine { cont ->
-                            val webView = runCatching { WebView(appContext) }.getOrNull()
+                            val ctx = activity ?: appContext
+                            val webView = runCatching { WebView(ctx) }.getOrNull()
                             if (webView == null) {
                                 if (cont.isActive) cont.resume(null)
                                 return@suspendCancellableCoroutine
                             }
-                            // 协程被取消（离开页面 / 超时 / ViewModel 销毁）时销毁 WebView：
-                            // 原先只有"成功/失败"两条路径会 destroy，取消路径会留下一个
-                            // 仍在跑 JS 的隐藏 WebView（内存 + 回调 + 风控样本全都留着）。
+                            if (activity != null && !activity.isFinishing && !activity.isDestroyed) {
+                                runCatching {
+                                    activity.addContentView(
+                                        webView,
+                                        ViewGroup.LayoutParams(1, 1)
+                                    )
+                                    webView.alpha = 0.99f
+                                    webView.translationX = -5000f
+                                    webView.isClickable = false
+                                    webView.isFocusable = false
+                                }
+                            }
                             cont.invokeOnCancellation {
                                 webView.post { destroyWebView(webView) }
                             }
-                            var usedUa = randomAndroidUa()
                             val host = runCatching { url.toHttpUrl().host }.getOrNull()
                             runCatching {
-                                webView.settings.javaScriptEnabled = true
-                                webView.settings.domStorageEnabled = true
+                                webView.layout(0, 0, 1080, 1920)
+                                webView.settings.apply {
+                                    javaScriptEnabled = true
+                                    domStorageEnabled = true
+                                    databaseEnabled = true
+                                    useWideViewPort = true
+                                    loadWithOverviewMode = true
+                                    cacheMode = WebSettings.LOAD_DEFAULT
+                                }
+                                webView.webChromeClient = WebChromeClient()
+                                val usedUa = systemDefaultUa
                                 webView.settings.userAgentString = usedUa
                                 CookieManager.getInstance().setAcceptCookie(true)
                                 CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
-                                runCatching {
-                                    val httpUrl = url.toHttpUrl()
-                                    val cookieHeader = cookieStore.loadForRequest(httpUrl)
-                                        .joinToString("; ") { "${it.name}=${it.value}" }
-                                    if (cookieHeader.isNotEmpty()) {
-                                        @Suppress("DEPRECATION")
-                                        CookieManager.getInstance().setCookie(url, cookieHeader)
-                                    }
+                                syncCookiesToWebView(url)
+
+                                var resumed = false
+                                fun tryFinishWithHtml(html: String) {
+                                    if (resumed) return
+                                    resumed = true
+                                    syncCookiesFromWebView(url)
+                                    if (host != null) recordChallengeUa(host, usedUa)
+                                    destroyWebView(webView)
+                                    if (cont.isActive) cont.resume(html)
                                 }
-                                var attempts = 0
+
                                 webView.webViewClient = object : WebViewClient() {
-                                    override fun onPageFinished(view: WebView?, url: String?) {
-                                        view?.evaluateJavascript(
-                                            "document.documentElement.outerHTML",
-                                            object : ValueCallback<String> {
-                                                override fun onReceiveValue(html: String?) {
-                                                    val decoded = runCatching {
-                                                        JSONTokener(html).nextValue() as String
-                                                    }.getOrNull()
-                                                    attempts++
-                                                    // Skip challenge pages and wait for Cloudflare's auto-redirect.
-                                                    if (decoded != null && (!isChallenge(decoded) || attempts >= 3)) {
-                                                        // 挑战已通过：记录 UA 并持久化 cf_clearance 等 Cookie
-                                                        if (host != null) challengeUa[host] = usedUa
-                                                        val finishedUrl = url
-                                                        if (finishedUrl != null) {
-                                                            runCatching {
-                                                                val wvCookies = CookieManager.getInstance()
-                                                                    .getCookie(finishedUrl)
-                                                                if (!wvCookies.isNullOrBlank()) {
-                                                                    cookieStore.saveRaw(finishedUrl.toHttpUrl(), wvCookies)
-                                                                }
-                                                            }
-                                                        }
-                                                        destroyWebView(webView)
-                                                        if (cont.isActive) cont.resume(decoded)
-                                                    }
-                                                }
+                                    override fun onPageFinished(view: WebView?, finishedUrl: String?) {
+                                        syncCookiesFromWebView(url)
+                                        view?.evaluateJavascript("document.documentElement.outerHTML") { htmlJson ->
+                                            val decoded = runCatching { JSONTokener(htmlJson).nextValue() as String }.getOrNull()
+                                            if (decoded != null && !isChallenge(decoded) && !decoded.contains("Just a moment") && decoded.length > 500) {
+                                                tryFinishWithHtml(decoded)
                                             }
-                                        )
+                                        }
                                     }
 
                                     override fun onReceivedError(
@@ -951,10 +1433,37 @@ class Wenku8Client(
                                         request: WebResourceRequest?,
                                         error: WebResourceError?,
                                     ) {
-                                        destroyWebView(webView)
-                                        if (cont.isActive) cont.resume(null)
+                                        val errorCode = error?.errorCode ?: 0
+                                        if (errorCode == -3) return // net::ERR_ABORTED
+                                        if (request != null && !request.isForMainFrame) return
                                     }
                                 }
+
+                                Log.d("Wenku8Debug", "webViewGet: starting for $url, UA=$usedUa")
+                                val pollScope = CoroutineScope(Dispatchers.Main)
+                                val pollJob = pollScope.launch {
+                                    val start = System.currentTimeMillis()
+                                    while (isActive && System.currentTimeMillis() - start < WEBVIEW_TIMEOUT_MS) {
+                                        delay(800)
+                                        if (resumed) break
+                                        syncCookiesFromWebView(url)
+                                        if (host != null) recordChallengeUa(host, usedUa)
+                                        webView.evaluateJavascript("document.documentElement.outerHTML") { htmlJson ->
+                                            if (resumed) return@evaluateJavascript
+                                            val decoded = runCatching { JSONTokener(htmlJson).nextValue() as String }.getOrNull()
+                                            if (decoded != null && !isChallenge(decoded) && !decoded.contains("Just a moment") && decoded.length > 500) {
+                                                Log.d("Wenku8Debug", "webViewGet: DOM ready, finishing with HTML! len=${decoded.length}")
+                                                tryFinishWithHtml(decoded)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                cont.invokeOnCancellation {
+                                    pollJob.cancel()
+                                    webView.post { destroyWebView(webView) }
+                                }
+
                                 webView.loadUrl(url)
                             }.onFailure {
                                 destroyWebView(webView)
@@ -974,12 +1483,14 @@ class Wenku8Client(
      * 阻止后续清理（否则就成了"清理过程中崩溃"）。
      */
     private fun destroyWebView(webView: WebView) {
+        runCatching {
+            val parent = webView.parent as? ViewGroup
+            parent?.removeView(webView)
+        }
         runCatching { webView.stopLoading() }
         runCatching { webView.loadUrl("about:blank") }
         runCatching { webView.clearHistory() }
         runCatching { webView.removeAllViews() }
-        // 换成空实现而不是 null（SDK 里该属性是非空类型），目的是断开原匿名回调
-        // 对协程 continuation 的引用，避免销毁后仍被回调持有。
         runCatching { webView.webViewClient = WebViewClient() }
         runCatching { webView.destroy() }
     }

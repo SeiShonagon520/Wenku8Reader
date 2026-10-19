@@ -2,40 +2,39 @@ package com.hoshino.wenku8reader.ui.reader
 
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import coil.compose.rememberAsyncImagePainter
 import coil.imageLoader
 import coil.request.ImageRequest
 import com.hoshino.wenku8reader.R
@@ -44,35 +43,29 @@ import com.hoshino.wenku8reader.data.FileSaver
 import com.hoshino.wenku8reader.data.Wenku8Hosts
 import com.hoshino.wenku8reader.di.AppContainer
 import com.hoshino.wenku8reader.ui.theme.isMiuixStyle
-import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.min
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.saket.telephoto.zoomable.ZoomSpec
+import me.saket.telephoto.zoomable.coil.ZoomableAsyncImage
+import me.saket.telephoto.zoomable.rememberZoomableImageState
+import me.saket.telephoto.zoomable.rememberZoomableState
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowDialog
 
-/** 预览的最大放大倍数：再大就是像素块了，也给复位留出明确手感。 */
+/** 预览的最大放大倍数：支持超清插图高达 5 倍的平滑切片缩放 */
 private const val PREVIEW_MAX_SCALE = 5f
 
-/** 双击放大到的倍数。 */
-private const val PREVIEW_DOUBLE_TAP_SCALE = 2.5f
-
 /**
- * 插图全屏预览。
+ * 插图全屏预览（基于 Telephoto 高性能分块切片缩放组件）。
  *
- * 交互（对应用户要求的三条）：
- * 1. **双指缩放 / 拖动平移**：`detectTransformGestures` 处理缩放与平移，缩放钳在
- *    1x..[PREVIEW_MAX_SCALE]，平移按"图片放大后超出的部分"钳制，不会把图片拖出屏幕；
- * 2. **长按图片 → 询问是否保存**：长按弹确认框，确认后在 IO 线程拉取原图字节并交给
- *    [FileSaver]（与下载 TXT/EPUB 同一套落盘逻辑，含同名覆盖处理）；
- * 3. **点击空白处返回**：只有点在图片**实际显示区域之外**（ContentScale.Fit 留下的黑边，
- *    已计入当前的缩放与平移）才关闭，点在图片上不会误退。
- *
- * 另外提供双击复位/放大，这是图片预览的通用习惯，不额外增加操作成本。
+ * 核心特性：
+ * 1. **超清切片/分块加载**：集成 Telephoto ZoomableAsyncImage，即使 4K/8K 巨幅跨页插图也以 Tile 切片按需解码，零 OOM 风险；
+ * 2. **手势与流体物理**：原生支持平滑的双指缩放、惯性拖拽平移、双击智能放大/还原与边缘弹性回弹；
+ * 3. **极简 HUD**：顶部提供半透明沉浸操作胶囊（关闭与一键保存），同时支持单击任意处退出与长按图片呼出保存对话框；
+ * 4. **物理返回拦截**：响应系统返回手势关闭预览，避免直接退出阅读页；
+ * 5. **原图无损保存**：优先复用 Coil 磁盘缓存原文，保证原画质落盘。
  */
 @Composable
 fun ReaderImagePreview(
@@ -86,97 +79,71 @@ fun ReaderImagePreview(
         ImageRequest.Builder(context)
             .data(Wenku8Hosts.normalizeImageUrl(url))
             .setHeader("Referer", Wenku8Hosts.IMAGE_REFERER)
+            .crossfade(true)
             .build()
     }
-    val painter = rememberAsyncImagePainter(request)
 
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
-    var containerSize by remember { mutableStateOf(IntSize.Zero) }
     var showSaveDialog by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
 
-    // 图片在容器里"未缩放"时占的矩形（ContentScale.Fit）。intrinsicSize 未知（还没解码完）
-    // 时退化为铺满容器：此时点在图片上不会被当成"点空白"，符合直觉。
-    val fitSize: Size = remember(painter.intrinsicSize, containerSize) {
-        val iw = painter.intrinsicSize.width
-        val ih = painter.intrinsicSize.height
-        val cw = containerSize.width.toFloat()
-        val ch = containerSize.height.toFloat()
-        if (iw <= 0f || ih <= 0f || cw <= 0f || ch <= 0f) {
-            Size(cw, ch)
-        } else {
-            val fit = min(cw / iw, ch / ih)
-            Size(iw * fit, ih * fit)
-        }
-    }
+    // 拦截返回手势
+    BackHandler(onBack = onDismiss)
 
-    /** 把平移钳制在"图片超出容器的那部分"之内；未放大时归零。 */
-    fun clampOffset(candidate: Offset): Offset {
-        val maxX = max(0f, (fitSize.width * scale - containerSize.width) / 2f)
-        val maxY = max(0f, (fitSize.height * scale - containerSize.height) / 2f)
-        return Offset(
-            candidate.x.coerceIn(-maxX, maxX),
-            candidate.y.coerceIn(-maxY, maxY),
-        )
-    }
-
-    /** 触点是否落在当前（含缩放/平移）的图片显示区域内。 */
-    fun isInsideImage(position: Offset): Boolean {
-        if (containerSize.width == 0 || containerSize.height == 0) return true
-        val center = Offset(
-            containerSize.width / 2f + offset.x,
-            containerSize.height / 2f + offset.y,
-        )
-        val halfWidth = fitSize.width * scale / 2f
-        val halfHeight = fitSize.height * scale / 2f
-        return abs(position.x - center.x) <= halfWidth &&
-            abs(position.y - center.y) <= halfHeight
-    }
+    val zoomableState = rememberZoomableState(
+        zoomSpec = ZoomSpec(maxZoomFactor = PREVIEW_MAX_SCALE)
+    )
+    val imageState = rememberZoomableImageState(zoomableState)
 
     Box(
-        Modifier
+        modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.94f))
-            .onSizeChanged { containerSize = it }
-            // 点击/长按/双击：点击只负责"点空白返回"，长按询问保存
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { position -> if (!isInsideImage(position)) onDismiss() },
-                    onLongPress = { showSaveDialog = true },
-                    onDoubleTap = {
-                        if (scale > 1f) {
-                            scale = 1f
-                            offset = Offset.Zero
-                        } else {
-                            scale = PREVIEW_DOUBLE_TAP_SCALE
-                        }
-                    },
+    ) {
+        // Telephoto 核心全屏交互图片组件
+        ZoomableAsyncImage(
+            model = request,
+            contentDescription = stringResource(R.string.reader_illustration),
+            state = imageState,
+            modifier = Modifier.fillMaxSize(),
+            onClick = { onDismiss() },
+            onLongClick = { showSaveDialog = true }
+        )
+
+        // 顶部浮动快捷操作栏（半透明胶囊）
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onDismiss,
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Black.copy(alpha = 0.5f),
+                    contentColor = Color.White
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = stringResource(R.string.action_cancel)
                 )
             }
-            // 缩放/平移：放在点击检测之后，短按不会触发它，双指手势也不会被当成点击
-            .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    val next = (scale * zoom).coerceIn(1f, PREVIEW_MAX_SCALE)
-                    scale = next
-                    offset = if (next <= 1f) Offset.Zero else clampOffset(offset + pan)
-                }
-            },
-    ) {
-        // 复用上面的 painter：同一张图不再走第二次请求（Coil 会命中内存缓存，但没必要多发一次）
-        Image(
-            painter = painter,
-            contentDescription = stringResource(R.string.reader_illustration),
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = offset.x
-                    translationY = offset.y
-                },
-        )
+
+            IconButton(
+                onClick = { showSaveDialog = true },
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Black.copy(alpha = 0.5f),
+                    contentColor = Color.White
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Download,
+                    contentDescription = stringResource(R.string.reader_image_save)
+                )
+            }
+        }
     }
 
     if (showSaveDialog) {

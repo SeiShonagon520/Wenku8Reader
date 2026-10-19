@@ -94,14 +94,22 @@ object AppParsers {
         content.split("<!--image-->").forEach { seg ->
             val s = seg.trim()
             if (s.startsWith("http")) {
-                images.add(Wenku8Hosts.normalizeImageUrl(s))
+                val norm = Wenku8Hosts.normalizeImageUrl(s)
+                images.add(norm)
+                textParts.add("[[IMG:$norm]]")
             } else if (s.isNotBlank()) {
-                textParts.add(Parsers.unescape(s))
+                val unesc = Parsers.unescape(s)
+                unesc.split("\n").forEach { l ->
+                    val clean = l.trimStart(' ', '\t', '\u3000', '\u00A0').trimEnd()
+                    if (clean.isNotEmpty()) {
+                        textParts.add("\u3000\u3000$clean")
+                    }
+                }
             }
         }
         return ChapterContent(
             title = title,
-            text = textParts.joinToString("\n"),
+            text = textParts.joinToString("\n\n"),
             images = images,
         )
     }

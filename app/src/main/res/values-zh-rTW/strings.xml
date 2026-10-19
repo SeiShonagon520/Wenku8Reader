@@ -91,6 +91,31 @@
     <string name="bookcase_sort_name">書名</string>
     <string name="bookcase_sort_word_count">字數</string>
     <string name="bookcase_sort_reverse">倒序</string>
+    <string name="bookcase_view_mode">檢視模式</string>
+    <string name="bookcase_view_compact">緊湊畫廊</string>
+    <string name="bookcase_view_grid">海報畫廊</string>
+    <string name="bookcase_view_list">詳細列表</string>
+    <string name="bookcase_view_shelf">實體書架</string>
+    <string name="bookcase_sort_latest_desc">最新更新優先（由新到舊）</string>
+    <string name="bookcase_sort_latest_asc">最早更新優先（由舊到新）</string>
+    <string name="bookcase_sort_name_asc">書名升序（A → Z）</string>
+    <string name="bookcase_sort_name_desc">書名降序（Z → A）</string>
+    <string name="bookcase_sort_word_desc">字數優先（由多到少）</string>
+    <string name="bookcase_sort_word_asc">字數優先（由少到多）</string>
+    <string name="bookcase_account_title">個人帳戶中心</string>
+    <string name="bookcase_account_badge_verified">文庫8 綁定帳號</string>
+    <string name="bookcase_account_badge_guest">本地訪客模式</string>
+    <string name="bookcase_account_books_local">本地藏書</string>
+    <string name="bookcase_account_books_read">已讀完</string>
+    <string name="bookcase_account_books_reading">在讀中</string>
+    <string name="bookcase_account_logout_done">已退出目前帳號並恢復訪客模式</string>
+    <string name="reader_paper_preset">底紙</string>
+    <string name="reader_paper_default">文庫米黃</string>
+    <string name="reader_paper_parchment">羊皮紙</string>
+    <string name="reader_paper_green">豆沙清綠</string>
+    <string name="reader_paper_white">水墨純白</string>
+    <string name="reader_paper_dark">沉浸微光</string>
+    <string name="reader_paper_true_black">AMOLED純黑</string>
 
     <!-- 詳情 · 收藏 -->
     <string name="detail_favorite">收藏</string>
@@ -184,8 +209,25 @@
 
     <!-- 設定 -->
     <string name="settings_section_account">帳號</string>
-    <string name="settings_builtin_account">內建帳戶</string>
-    <string name="settings_account_builtin_desc">應用全程使用內建共享帳號，無需登入或切換</string>
+    <string name="settings_builtin_account">內建共享帳戶 (w8racc)</string>
+    <string name="settings_account_builtin_desc">目前使用內建免密帳號，登入個人帳號可同步網頁端收藏書架</string>
+    <string name="settings_account_login">登入個人帳號</string>
+    <string name="settings_account_logout">登出帳號</string>
+    <string name="settings_account_sync_bookshelf">同步雲端書架</string>
+    <string name="settings_account_syncing">正在同步雲端書架…</string>
+    <string name="settings_account_personal">個人帳號：%1$s</string>
+    <string name="settings_account_personal_desc">已登入個人帳號，可單向同步拉取網頁端收藏書架</string>
+    <string name="settings_account_login_title">登入文庫8個人帳號</string>
+    <string name="settings_account_login_tip">支援輕小說文庫（wenku8.net）註冊帳號。登入後可將網頁端書架單向匯入至本機書架。</string>
+    <string name="settings_account_username">使用者名稱</string>
+    <string name="settings_account_password">密碼</string>
+    <string name="settings_account_logout_confirm_title">登出目前帳號</string>
+    <string name="settings_account_logout_confirm_msg">登出後將自動切換回內建共享帳號，本機書架與閱讀進度不受影響。</string>
+    <string name="settings_account_current">目前帳號：%1$s</string>
+    <string name="settings_account_sync_bookshelf_tip">雲端書架同步為單向讀取，將網頁端收藏的小說批次同步至本機書架。</string>
+    <string name="settings_account_login_and_sync">登入並同步</string>
+    <string name="settings_account_sync_now">立即同步</string>
+    <string name="settings_account_switch">切換帳號</string>
     <string name="settings_section_appearance">外觀</string>
     <string name="settings_section_storage">儲存空間</string>
     <string name="settings_section_experimental">實驗性</string>

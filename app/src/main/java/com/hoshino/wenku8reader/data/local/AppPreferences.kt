@@ -31,6 +31,12 @@ class AppPreferences(context: Context) {
             ui.edit().putBoolean("bookcase_sort_reversed", value).apply()
         }
 
+    var bookcaseViewMode: String
+        get() = ui.getString("bookcase_view_mode", "grid") ?: "grid"
+        set(value) {
+            ui.edit().putString("bookcase_view_mode", value).apply()
+        }
+
     // ---- 更新检查 ----
     /** 用户选择「跳过该版本」的 release tag（如 v0.2.0）；启动/手动检查时不再提示。 */
     var skippedUpdateVersion: String?
@@ -45,4 +51,28 @@ class AppPreferences(context: Context) {
         set(value) {
             ui.edit().putLong("last_update_check_at", value).apply()
         }
+
+    // ---- 用户个人账号 ----
+    /** 用户自定义文库8账号用户名（为空时使用内置共享账号） */
+    var customUsername: String?
+        get() = ui.getString("custom_username", null)
+        set(value) {
+            ui.edit().putString("custom_username", value).apply()
+        }
+
+    /** 用户自定义文库8账号密码 */
+    var customPassword: String?
+        get() = ui.getString("custom_password", null)
+        set(value) {
+            ui.edit().putString("custom_password", value).apply()
+        }
+
+    /** 当前是否处于个人账号登录状态 */
+    val isCustomAccount: Boolean
+        get() = !customUsername.isNullOrBlank() && !customPassword.isNullOrBlank()
+
+    /** 清理个人凭据，退出登录并恢复内置共享账号 */
+    fun clearCustomAccount() {
+        ui.edit().remove("custom_username").remove("custom_password").apply()
+    }
 }

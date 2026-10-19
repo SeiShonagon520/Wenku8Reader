@@ -40,7 +40,7 @@ import com.hoshino.wenku8reader.R
 import com.hoshino.wenku8reader.data.BookInfo
 import com.hoshino.wenku8reader.data.JobStatus
 import com.hoshino.wenku8reader.ui.AppViewModelProvider
-import com.hoshino.wenku8reader.ui.common.CoverImage
+import com.hoshino.wenku8reader.ui.components.BookCover3D
 import com.hoshino.wenku8reader.ui.detail.DetailViewModel
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
@@ -197,15 +197,16 @@ private fun MiuixDetailInfoCard(
 ) {
     MiuixSection {
         Row(Modifier.fillMaxWidth().padding(14.dp)) {
-            CoverImage(
+            BookCover3D(
                 url = info.coverUrl,
-                width = 110.dp,
-                height = 156.dp,
+                width = 114.dp,
+                height = 162.dp,
                 contentDescription = stringResource(R.string.detail_cover),
-                cornerRadius = 12.dp,
+                cornerRadius = 8.dp,
+                elevation = 6.dp,
                 crossfade = true,
             )
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     text = info.title,

@@ -41,7 +41,7 @@ class ReaderViewModel(
     savedStateHandle: SavedStateHandle,
     private val repository: Wenku8Repository,
     private val progressStore: ReadingProgressStore,
-    private val readerSettings: ReaderSettings,
+    val readerSettings: ReaderSettings,
     val readingStats: ReadingStatsStore,
 ) : ViewModel() {
 
@@ -196,6 +196,39 @@ class ReaderViewModel(
             if (!isActive) return@launch
             _ui.update {
                 it.copy(chapterLoading = false, currentCid = cid, currentChapter = display)
+            }
+            prefetchAdjacentChapters(cid)
+        }
+    }
+
+    private var prefetchJob: Job? = null
+
+    /**
+     * 后台静默预加载：当前章节成功呈现后，在后台自动预拉取下一章节的正文与插图，
+     * 写入磁盘与内存缓存。用户翻至章末切下一章时实现 0 延迟秒开。
+     */
+    private fun prefetchAdjacentChapters(cid: String) {
+        prefetchJob?.cancel()
+        val gid = _ui.value.gid ?: return
+        val flat = _ui.value.flatChapters
+        val curIdx = flat.indexOfFirst { it.cid == cid }
+        if (curIdx < 0) return
+
+        val nextChapter = flat.getOrNull(curIdx + 1)
+        val prevChapter = flat.getOrNull(curIdx - 1)
+
+        prefetchJob = viewModelScope.launch(Dispatchers.IO) {
+            // 优先预拉取下一章
+            if (nextChapter != null) {
+                runCatching {
+                    repository.chapterContent(gid, bookId, nextChapter.cid)
+                }
+            }
+            // 备选确保上一章也在缓存中（便于回翻）
+            if (prevChapter != null) {
+                runCatching {
+                    repository.chapterContent(gid, bookId, prevChapter.cid)
+                }
             }
         }
     }

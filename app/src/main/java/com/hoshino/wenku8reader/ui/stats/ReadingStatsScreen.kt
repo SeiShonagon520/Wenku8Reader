@@ -134,7 +134,11 @@ fun ReadingStatsScreen(
 
                     // 汇总卡（LNR StatsCards 风格）：累计 / 本周 / 连续 / 日均
                     SummaryRow(ui)
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(12.dp))
+
+                    // 现代趋势图表：动态平滑贝塞尔走势（Vico 驱动）
+                    ReadingTrendChart(ui = ui)
+                    Spacer(Modifier.height(12.dp))
 
                     HeatmapGrid(ui, onSelect = vm::selectDay)
                     Spacer(Modifier.height(6.dp))

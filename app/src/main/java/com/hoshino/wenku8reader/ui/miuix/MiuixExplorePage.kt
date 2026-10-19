@@ -62,7 +62,6 @@ fun MiuixExplorePage(
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     var keyword by rememberSaveable { mutableStateOf("") }
-    var byAuthor by rememberSaveable { mutableStateOf(false) }
     var mode by rememberSaveable { mutableStateOf(ExploreMode.RECOMMEND) }
 
     LaunchedEffect(Unit) { vm.loadHomeOnce() }
@@ -85,10 +84,8 @@ fun MiuixExplorePage(
         ) {
             MiuixSearchRow(
                 keyword = keyword,
-                byAuthor = byAuthor,
                 onKeywordChange = { keyword = it },
-                onByAuthorChange = { byAuthor = it },
-                onSearch = { if (keyword.isNotBlank()) onSearch(keyword, byAuthor) },
+                onSearch = { if (keyword.isNotBlank()) onSearch(keyword, false) },
             )
             TabRow(
                 tabs = listOf(
@@ -137,10 +134,9 @@ fun MiuixSearchPage(
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     var keyword by rememberSaveable(initialKeyword) { mutableStateOf(initialKeyword) }
-    var byAuthor by rememberSaveable(initialByAuthor) { mutableStateOf(initialByAuthor) }
 
-    LaunchedEffect(initialKeyword, initialByAuthor) {
-        if (initialKeyword.isNotBlank()) vm.search(initialKeyword, initialByAuthor)
+    LaunchedEffect(initialKeyword) {
+        if (initialKeyword.isNotBlank()) vm.search(initialKeyword, false)
     }
 
     MiuixSubPage(title = stringResource(R.string.action_search), onBack = onBack) { inner ->
@@ -151,10 +147,8 @@ fun MiuixSearchPage(
         ) {
             MiuixSearchRow(
                 keyword = keyword,
-                byAuthor = byAuthor,
                 onKeywordChange = { keyword = it },
-                onByAuthorChange = { byAuthor = it },
-                onSearch = { if (keyword.isNotBlank()) vm.search(keyword, byAuthor) },
+                onSearch = { if (keyword.isNotBlank()) vm.search(keyword, false) },
             )
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 MiuixSearchBody(ui = ui, onOpenBook = onOpenBook)
@@ -163,13 +157,11 @@ fun MiuixSearchPage(
     }
 }
 
-/** 圆角搜索框（miuix `TextField`）+ 作者筛选 + 搜索按钮。 */
+/** 圆角搜索框（miuix `TextField`）+ 搜索按钮。 */
 @Composable
 private fun MiuixSearchRow(
     keyword: String,
-    byAuthor: Boolean,
     onKeywordChange: (String) -> Unit,
-    onByAuthorChange: (Boolean) -> Unit,
     onSearch: () -> Unit,
 ) {
     Row(
@@ -186,27 +178,6 @@ private fun MiuixSearchRow(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         )
         Spacer(Modifier.width(8.dp))
-        // 作者筛选：miuix 没有 chip，用主题色的胶囊文字表达选中态
-        Text(
-            text = stringResource(R.string.search_by_author),
-            style = MiuixTheme.textStyles.footnote1,
-            color = if (byAuthor) {
-                MiuixTheme.colorScheme.primary
-            } else {
-                MiuixTheme.colorScheme.onSurfaceSecondary
-            },
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(
-                    if (byAuthor) {
-                        MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)
-                    } else {
-                        Color.Transparent
-                    },
-                )
-                .clickable { onByAuthorChange(!byAuthor) }
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-        )
         MiuixIconButton(
             icon = Icons.Filled.Search,
             contentDescription = stringResource(R.string.action_search),

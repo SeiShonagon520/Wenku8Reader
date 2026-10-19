@@ -162,15 +162,7 @@ fun MainScaffold() {
     // 2) 消费者（底栏）必须留在被录制层**之外**，否则同样会自我引用。
     val backdrop = rememberLayerBackdrop()
     val updateState by container.updateCenter.state.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) {
-        delay(STARTUP_UPDATE_CHECK_DELAY_MS)
-        // 必须读取**最新**的设置值：原实现在此读取的是 LaunchedEffect(Unit) 首次组合时
-        // 捕获的旧快照，导致用户在延迟窗口内关掉「启动检查」仍会被检查（反之亦然）。
-        // 更新中心自身还有 24h 节流（见 UpdateCenter.check），此处延迟只为避让首屏竞争。
-        if (container.readerSettings.flow.value.checkUpdatesOnStartup) {
-            container.updateCenter.check(manual = false)
-        }
-    }
+    // 启动时不再自动触发更新检查与弹窗（手动检查可在「设置 - 更新」中进行）
     // 更新弹窗也按风格二选一：MIUIX 用 miuix WindowDialog，Material 用 M3 AlertDialog
     if (isMiuixStyle()) {
         MiuixUpdateDialog(

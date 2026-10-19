@@ -74,7 +74,6 @@ fun ExplorePage(
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     var keyword by rememberSaveable { mutableStateOf("") }
-    var byAuthor by rememberSaveable { mutableStateOf(false) }
     var mode by rememberSaveable { mutableStateOf(ExploreMode.RECOMMEND) }
 
     LaunchedEffect(Unit) { vm.loadHomeOnce() }
@@ -105,11 +104,9 @@ fun ExplorePage(
         ) {
             SearchRow(
                 keyword = keyword,
-                byAuthor = byAuthor,
                 onKeywordChange = { keyword = it },
-                onByAuthorChange = { byAuthor = it },
                 onSearch = {
-                    if (keyword.isNotBlank()) onSearch(keyword, byAuthor)
+                    if (keyword.isNotBlank()) onSearch(keyword, false)
                 },
             )
             ExploreTabRow(
@@ -141,13 +138,11 @@ fun ExplorePage(
     }
 }
 
-/** 圆角搜索条：搜索图标 + 输入框 + 作者筛选 Chip + 搜索按钮。 */
+/** 圆角搜索条：搜索图标 + 输入框 + 搜索按钮。 */
 @Composable
 private fun SearchRow(
     keyword: String,
-    byAuthor: Boolean,
     onKeywordChange: (String) -> Unit,
-    onByAuthorChange: (Boolean) -> Unit,
     onSearch: () -> Unit,
 ) {
     Row(
@@ -162,14 +157,13 @@ private fun SearchRow(
             modifier = Modifier.weight(1f),
         ) {
             Row(
-                Modifier.padding(horizontal = 4.dp),
+                Modifier.padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
                     Icons.Filled.Search,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 10.dp),
                 )
                 BasicTextField(
                     value = keyword,
@@ -193,12 +187,6 @@ private fun SearchRow(
                         }
                         inner()
                     },
-                )
-                FilterChip(
-                    selected = byAuthor,
-                    onClick = { onByAuthorChange(!byAuthor) },
-                    label = { Text(stringResource(R.string.search_by_author)) },
-                    modifier = Modifier.padding(end = 4.dp),
                 )
             }
         }
@@ -234,17 +222,16 @@ private fun ExploreTabRow(
 @Composable
 fun SearchScreen(
     initialKeyword: String,
-    initialByAuthor: Boolean,
+    initialByAuthor: Boolean = false,
     onBack: () -> Unit,
     onOpenBook: (Int) -> Unit,
     vm: ExploreViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     var keyword by rememberSaveable(initialKeyword) { mutableStateOf(initialKeyword) }
-    var byAuthor by rememberSaveable(initialByAuthor) { mutableStateOf(initialByAuthor) }
 
-    LaunchedEffect(initialKeyword, initialByAuthor) {
-        if (initialKeyword.isNotBlank()) vm.search(initialKeyword, initialByAuthor)
+    LaunchedEffect(initialKeyword) {
+        if (initialKeyword.isNotBlank()) vm.search(initialKeyword, false)
     }
 
     ExpressiveScaffold(
@@ -275,11 +262,9 @@ fun SearchScreen(
         ) {
             SearchRow(
                 keyword = keyword,
-                byAuthor = byAuthor,
                 onKeywordChange = { keyword = it },
-                onByAuthorChange = { byAuthor = it },
                 onSearch = {
-                    if (keyword.isNotBlank()) vm.search(keyword, byAuthor)
+                    if (keyword.isNotBlank()) vm.search(keyword, false)
                 },
             )
             SearchBody(

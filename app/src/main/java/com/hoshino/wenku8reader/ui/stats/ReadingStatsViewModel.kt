@@ -172,15 +172,11 @@ class ReadingStatsViewModel(private val store: ReadingStatsStore) : ViewModel() 
         s: ReadingScale,
         records: List<ReadingDayStat>,
         today: LocalDate,
-    ): Pair<LocalDate, LocalDate> = when (s) {
-        ReadingScale.WEEK -> today.with(DayOfWeek.MONDAY) to today
-        ReadingScale.MONTH -> today.withDayOfMonth(1) to today
-        ReadingScale.YEAR -> today.withDayOfYear(1) to today
-        ReadingScale.ALL -> {
-            val min = records.minOfOrNull { LocalDate.ofEpochDay(it.epochDay) }
-            (min ?: today.minusDays(364)) to today
-        }
-    }
+    ): Pair<LocalDate, LocalDate> = rangeOfScale(
+        scale = s,
+        minEpochDay = records.minOfOrNull { it.epochDay },
+        today = today,
+    )
 
     /**
      * 构建周列网格：从覆盖 [start] 的周一开始，到覆盖 [end] 的周日为止。

@@ -1,90 +1,124 @@
-#  轻小说文库（Wenku8Reader）
-![w8r.png](.github/assets/w8r.png)
-
-> 一款面向轻小说爱好者的 Android 阅读客户端，数据来自 wenku8.net 轻小说文库。
+# 轻小说文库 (Wenku8Reader)
 
 <p align="center">
-  <a href="https://qm.qq.com/q/PeFKgwevG6">
-    <img src="https://img.shields.io/badge/QQ%E4%BA%A4%E6%B5%81%E7%BE%A4-1106956143-12B7F5?style=flat-square&logo=tencentqq&logoColor=white" alt="QQ交流群" />
-  </a>
-  <a href="https://www.ifdian.net/a/wenku8reader">
-    <img src="https://img.shields.io/badge/%E7%88%B1%E5%8F%91%E7%94%B5-%E7%BB%99%E4%BD%9C%E8%80%85%E4%B9%B0%E6%9D%AF%E5%92%96%E5%95%A1-946CE6?style=flat-square&logo=buymeacoffee&logoColor=white" alt="爱发电" />
-  </a>
+  <img src=".github/assets/w8r.png" alt="Wenku8Reader" width="100%" />
 </p>
 
-![Visitors](https://count.moeyy.cn/@Wenku8Reader?name=Wenku8Reader&theme=moebooru&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto)
+一款基于 Kotlin 与 Jetpack Compose 开发的原生 Android 轻小说阅读客户端。数据源来自 wenku8.net，专为移动端轻小说阅读体验打磨。
 
-## 简介
+---
 
-**轻小说文库**是一款原生 Android 阅读器：浏览 wenku8 全站栏目、搜索与分类找书、一键加入书架，并内置了沉浸式在线阅读器——支持侧滑翻页、自动翻页、音量键翻页、简繁转换，还可将整本书离线下载为 TXT / EPUB 随时阅读。
+## 核心特性
 
-应用采用 **Material 3 Expressive** 设计语言：卡片化界面、动态取色（跟随系统壁纸生成主题色）、弹性形变与柔性顶栏、波浪进度与形变加载指示器、装饰形状空态、深色/纯黑（OLED 省电）模式，并适配 120Hz 高刷新率屏幕，滑动与翻页顺滑跟手。
+### 1. 阅读器引擎
+- **无感后台预拉取**：阅读当前章节时，后台异步静默预缓存下一章节，翻卷无白屏卡顿。
+- **插图原位内嵌**：按轻小说原生版式将插图内嵌在文字段落之间，点击可全屏查看、手势缩放与保存。
+- **精准分页算法**：基于 `TextMeasurer` 动态计算屏幕绘制区域与行高，杜绝章节底部漏字与裁切问题。
+- **排版规范优化**：段落首行自动规范全角缩进（两字符），自动过滤多余空行，遵守中文标点避头尾法则。
+- **双阅读模式**：支持左右平滑侧滑翻页与上下连贯滚动阅读，并支持音量键翻页与自动翻页。
+- **外观定制与纸张预设**：内置仿羊皮纸、竹青护眼、水墨宣纸、纯黑 OLED 等底色，字号、行距、边距及系统字体自由调节。
+- **简繁一键转换**：基于 opencc4j 实现段落级简繁双向即时转换。
 
+### 2. 网络韧性与多镜像容灾
+- **多镜像节点池**：内置文库8多套镜像源（主站 + 各级备用镜像），避免单域名受阻导致加载失败。
+- **自动降级与熔断重试**：当主域名不可达或遇到波动时，自动降级至可用镜像节点并记录健康状态。
+- **反爬与安全穿透**：OkHttp + Cronet 组合网络栈，支持 Cloudflare 会话复用与防刷绕过。
 
-## 功能特性
+### 3. 书架管理与个人中心
+- **四种视图布局**：
+  - **紧凑画廊**：自适应 4 列网格，高密度排布，针对百本以上藏书提供高效检索；
+  - **海报画廊**：精美立体 3D 书脊与高光质感封面展示；
+  - **详细列表**：展示完整书名、作者、字数与最新更新章节；
+  - **实体书架**：拟物风格木质书架陈列。
+- **多维度排序**：支持“最近更新”、“书名拼音/笔画”、“全书字数”排序，带有直观的正反向指示与一键升降序切换。
+- **个人账户中心**：支持绑定文库8网页端个人账号，支持云端书架一键导入本地，统计本地藏书与在读进度。
 
--  **探索发现**：首页栏目（封面轮播 + 文字榜单）、书名/作者搜索、分类标签浏览
--  **我的书架**：收藏管理、多种排序（默认/最近更新/书名/字数/倒序）、一键继续阅读
--  **沉浸式阅读器**：
-  - 侧滑翻页 / 滚动翻页双模式，点按左右翻页
-  - 自动翻页（可设间隔）、音量键翻页
-  - 章节进度自动记录，重开自动续读
-  - 简体 ↔ 繁体一键切换
-  - 阅读外观自由定制：背景色/背景图、正文字色、字体、字号、行距、四周边距
-  - 插图章节直接显示图片
--  **离线下载**：整本下载为 TXT（简/繁/UTF-8）或 EPUB，保存至 `Downloads/Wenku8/`
--  **本地缓存**：已加载的详情/目录/章节自动落盘缓存，断网也能读看过的章节，二次打开不重复联网
--  **网络韧性**：Cloudflare 自动绕过（多镜像 + cf_clearance 复用）、主站域名可在设置中切换
--  **个性化外观**：动态取色 / 手动种子色、深色模式（跟随系统/浅色/深色）、OLED 纯黑模式
+### 4. 阅读数据统计与热力图
+- **贡献热力图**：提供类似 GitHub 贡献图的阅读热力矩阵，支持按周、按月、按年、全部历史跨度回溯。
+- **时长趋势走势**：基于 Vico 图表库绘制平滑贝塞尔走势曲线，直观呈现近期阅读时长变化。
+- **数据指标分析**：累计阅读总时长、连续阅读天数、活跃日均时长计算，点击具体日期可查看当日各书籍阅读明细。
 
-## 界面一览
+### 5. 离线缓存与导出
+- **全本离线下载**：支持将整本小说离线打包下载为 TXT（简/繁）或 EPUB 文件，自动归档至手机 `Downloads/Wenku8/`。
+- **本地阅读缓存**：章节与目录自动落盘存储（Room 数据库 + 磁盘缓存），断网状态下仍可顺畅阅读已缓存内容。
+- **存储管理**：可在设置中查看图片缓存、离线数据占用并一键清理过期记录。
 
-| 页面 | 说明 |
+### 6. 双界面设计系统
+- **Material 3 Expressive**（默认）：卡片化设计、动态取色（跟随系统壁纸色调）、弹性形变与现代动效。
+- **MIUIX / HyperOS 风格**（实验性）：仿小米 HyperOS 控件质感与液态玻璃悬浮底栏，可在设置中全局切换。
+
+---
+
+## 页面一览
+
+| 模块 | 说明 |
 |---|---|
-| 探索 | 顶栏 + 圆角搜索条，推荐/标签双 Tab（内置 50 个分类），封面卡片流 |
-| 书架 | 卡片化书单，进度一目了然，一键续读 |
-| 详情 | 封面信息卡、标签药丸、开始/继续阅读、离线下载卡、内容简介 |
-| 阅读器 | 沉浸式全屏，状态指示器（电量/时间/章节/进度），悬浮章节进度条 |
-| 设置 | 分组卡片：账号、外观（主题/纯黑/取色）、阅读设置、关于 |
+| **探索** | 轮播推荐、分类标签（内置 50+ 个细分分类）、多条件检索与即时搜索 |
+| **书架** | 4 列紧凑/画廊/列表/书架多视图切换、正反序排列、阅读进度与个人账户弹窗 |
+| **书籍详情** | 封面信息、分卷目录折叠、一键开始/继续阅读、全本 TXT/EPUB 离线下载 |
+| **阅读器** | 仿真翻页/滚动、快捷设置副岛、正文原位插图、字体/间距/纸张调节 |
+| **统计分析** | 贡献热力图矩阵、Vico 趋势折线图、打卡连续天数与书籍阅读时长明细 |
+| **系统设置** | 账号绑定、主题与深色模式、网络镜像配置、缓存与存储清理、应用内更新 |
 
-## 系统要求
+---
 
-- Android 8.0（API 26）及以上
-- 建议 Android 12+ 以体验完整的动态取色与高刷新率效果
+## 环境要求与本地构建
 
-## 下载与构建
+### 系统要求
+- **Android 系统**：Android 8.0（API 26）及以上
+- **推荐环境**：Android 12+（获得最佳动态取色与高刷体验）
 
-- **安装包**：GitHub Releases 发布（自动化：推送 `main` 后依据 Conventional Commits 自动升级版本、构建并发布，见 [VERSIONING.md](VERSIONING.md)）
-- **本地构建**：`./gradlew :app:assembleDebug`（产物 `app/build/outputs/apk/debug/app-debug.apk`），或用 Android Studio 打开后 **Run ▶**
-- 需要 **JDK 21**（CI 用 21；工具链为 AGP 9.4.1 / Gradle 9.7.1 / Kotlin 2.3.21）与 **Android SDK 37**
-  （`compileSdk = 37`：material3 1.5 要求 ≥35、miuix 0.9.x 的 AAR metadata 要求 37；`targetSdk` 仍为 34，
-  升到 35+ 会强制开启 edge-to-edge 与新的前台行为，属单独一轮改动）
-- 单元测试：`./gradlew :app:testDebugUnitTest`（纯 JVM，无需模拟器；CI 在打包前会先跑一遍）
+### 构建环境
+- **JDK**：21
+- **Android SDK**：`compileSdk = 37`, `targetSdk = 34`, `minSdk = 26`
+- **构建工具**：Android Gradle Plugin 9.4.1 / Gradle 9.7.1 / Kotlin 2.3.21
 
-## 支持与交流
+### 编译指令
+```bash
+# 克隆项目
+git clone https://github.com/SeiShonagon520/Wenku8Reader.git
+cd Wenku8Reader
 
-- [**QQ交流群**](https://qm.qq.com/q/PeFKgwevG6) —— 加入 QQ 交流群进行实时讨论。
-- [**给作者买杯咖啡**](https://www.ifdian.net/a/wenku8reader) —— 你的支持是我最大的更新动力
-- 如果你喜欢该项目，欢迎向他人分享！
+# 运行全量单元测试（包含数学计算、解析器、迁移等用例）
+./gradlew testDebugUnitTest
+
+# 打包 Debug 安装包（产物位于 app/build/outputs/apk/debug/app-debug.apk）
+./gradlew assembleDebug
+
+# 打包 Release 安装包
+./gradlew assembleRelease
+```
+
+---
+
+## 主要技术栈
+
+- **语言框架**：Kotlin + Jetpack Compose + Kotlin Coroutines & Flow
+- **架构模式**：MVVM + Clean Architecture 单向数据流
+- **UI 体系**：Material Design 3 (Expressive) / Miuix KMP
+- **数据持久化**：Room (SQLite) + Jetpack DataStore (Preferences)
+- **网络与解析**：OkHttp 5 + Cronet + 正则与流式 HTML 解析器
+- **图片加载**：Coil 3 (支持内存/磁盘双重缓存与动图加载)
+- **图表组件**：Vico 2.0 (现代 Compose 声明式图表)
+- **繁简处理**：opencc4j
+
+---
 
 ## 鸣谢
 
-- [**LightNovelReader**](https://github.com/dmzz-yyhyy/LightNovelReader) —— 本项目网络层与 Cloudflare 绕过方案的**重要参考**：cf_clearance 会话复用、随机 UA、内置分类清单、多镜像兜底等实现均借鉴自该项目，特此鸣谢。
+- [**LightNovelReader**](https://github.com/dmzz-yyhyy/LightNovelReader)：本项目在网络层建设、Cloudflare 穿透方案以及内置分类数据方面参考了其优秀思路，特此致谢。
+- [**SukiSU-Ultra**](https://github.com/ShirkNeko/SukiSU-Ultra) & [**AndroidLiquidGlass**](https://github.com/Kyant0/AndroidLiquidGlass)：提供了 MIUIX 风格底栏与液态玻璃视效参考。
 
-## 技术栈
+---
 
-原生 **Kotlin + Jetpack Compose + Material 3 Expressive** 构建，无 WebView 外壳；网络层基于 OkHttp + Cronet，图片加载使用 Coil，简繁转换使用 opencc4j。
+## 免责声明
 
-## 声明
+1. 本项目为开源软件，仅供技术交流与个人学习使用。
+2. 小说文本、插图及相关版权归原作者及轻小说文库 (wenku8.net) 所有。
+3. 请合理使用网络资源，遵守相关法律法规并支持正版轻小说。
 
-- 本应用仅用于**个人学习与交流**，请遵守 wenku8.net 站点使用条款，支持正版。
+---
 
 ## 许可证
 
-本项目以 **GNU General Public License v3.0** 发布，全文见 [LICENSE](LICENSE)。
-
-项目的部分界面实现改编自其他开源项目（液态玻璃底栏来自
-[SukiSU-Ultra](https://github.com/ShirkNeko/SukiSU-Ultra)，其上游为
-[Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass) 与
-compose-miuix-ui 示例），运行时依赖包含 AndroidX、miuix-kmp、OkHttp、Coil、OpenCC4J、Cronet 等。
-逐项来源与许可见 [NOTICE](NOTICE)。
+本项目基于 [GNU General Public License v3.0](LICENSE) 开源。

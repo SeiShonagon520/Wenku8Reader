@@ -1,8 +1,13 @@
 package com.hoshino.wenku8reader.ui.explore
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -144,13 +149,26 @@ internal fun HomeBody(
 @Composable
 private fun HomeSectionBlock(section: HomeSection, onOpenBook: (Int) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
-        Text(
-            section.title,
-            style = MaterialTheme.typography.titleMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 4.dp),
-        )
+        Row(
+            modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(16.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(MaterialTheme.colorScheme.primary),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                section.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         if (section.books.any { it.coverUrl != null }) {
             // 每行 4 本：快速滑动时一次性组合的封面数更少，显著降低组合爆发
             LazyRow(
@@ -162,32 +180,52 @@ private fun HomeSectionBlock(section: HomeSection, onOpenBook: (Int) -> Unit) {
                 }
             }
         } else {
-            // 纯文字榜单：surfaceBright 卡片
+            // 纯文字榜单：带有精细前三名金属奖章的圆角卡片
             TonalCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
             ) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                     section.books.take(10).forEachIndexed { i, b ->
+                        val rankColor = when (i) {
+                            0 -> Color(0xFFFFB300) // 金色
+                            1 -> Color(0xFF78909C) // 银色
+                            2 -> Color(0xFF8D6E63) // 铜色
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                        val rankBg = when (i) {
+                            0 -> Color(0xFFFFB300).copy(alpha = 0.16f)
+                            1 -> Color(0xFF78909C).copy(alpha = 0.16f)
+                            2 -> Color(0xFF8D6E63).copy(alpha = 0.16f)
+                            else -> Color.Transparent
+                        }
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                // 榜单每行一条、同屏最多 10 条：用普通 clickable 替代
-                                // pressClickable，避免为每行常驻 pressed 状态与动画
                                 .clickable { onOpenBook(b.id) }
                                 .padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                "${i + 1}",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.width(28.dp),
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(rankBg),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    "${i + 1}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (i < 3) FontWeight.Bold else FontWeight.Medium,
+                                    color = rankColor,
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
                             Text(
                                 b.name,
                                 style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (i < 3) FontWeight.Medium else FontWeight.Normal,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f),
@@ -199,3 +237,4 @@ private fun HomeSectionBlock(section: HomeSection, onOpenBook: (Int) -> Unit) {
         }
     }
 }
+

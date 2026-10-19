@@ -91,6 +91,31 @@
     <string name="bookcase_sort_name">书名</string>
     <string name="bookcase_sort_word_count">字数</string>
     <string name="bookcase_sort_reverse">倒序</string>
+    <string name="bookcase_view_mode">视图模式</string>
+    <string name="bookcase_view_compact">紧凑画廊</string>
+    <string name="bookcase_view_grid">海报画廊</string>
+    <string name="bookcase_view_list">详细列表</string>
+    <string name="bookcase_view_shelf">实体书架</string>
+    <string name="bookcase_sort_latest_desc">最新更新优先（由新到旧）</string>
+    <string name="bookcase_sort_latest_asc">最早更新优先（由旧到新）</string>
+    <string name="bookcase_sort_name_asc">书名升序（A → Z）</string>
+    <string name="bookcase_sort_name_desc">书名降序（Z → A）</string>
+    <string name="bookcase_sort_word_desc">字数优先（由多到少）</string>
+    <string name="bookcase_sort_word_asc">字数优先（由少到多）</string>
+    <string name="bookcase_account_title">个人账户中心</string>
+    <string name="bookcase_account_badge_verified">文库8 绑定账号</string>
+    <string name="bookcase_account_badge_guest">本地访客模式</string>
+    <string name="bookcase_account_books_local">本地藏书</string>
+    <string name="bookcase_account_books_read">已读完</string>
+    <string name="bookcase_account_books_reading">在读中</string>
+    <string name="bookcase_account_logout_done">已退出当前账号并恢复访客模式</string>
+    <string name="reader_paper_preset">底纸</string>
+    <string name="reader_paper_default">文库米黄</string>
+    <string name="reader_paper_parchment">羊皮纸</string>
+    <string name="reader_paper_green">豆沙清绿</string>
+    <string name="reader_paper_white">水墨纯白</string>
+    <string name="reader_paper_dark">沉浸微光</string>
+    <string name="reader_paper_true_black">AMOLED纯黑</string>
 
     <!-- 详情 · 收藏 -->
     <string name="detail_favorite">收藏</string>
@@ -184,8 +209,25 @@
 
     <!-- 设置 -->
     <string name="settings_section_account">账号</string>
-    <string name="settings_builtin_account">内置账户</string>
-    <string name="settings_account_builtin_desc">应用全程使用内置共享账号，无需登录或切换</string>
+    <string name="settings_builtin_account">内置共享账户 (w8racc)</string>
+    <string name="settings_account_builtin_desc">当前使用内置免密账号，登录个人账号可同步网页端收藏书架</string>
+    <string name="settings_account_login">登录个人账号</string>
+    <string name="settings_account_logout">退出登录</string>
+    <string name="settings_account_sync_bookshelf">同步云端书架</string>
+    <string name="settings_account_syncing">正在同步云端书架…</string>
+    <string name="settings_account_personal">个人账号：%1$s</string>
+    <string name="settings_account_personal_desc">已登录个人账号，可单向同步拉取网页端收藏书架</string>
+    <string name="settings_account_login_title">登录文库8个人账号</string>
+    <string name="settings_account_login_tip">支持轻小说文库（wenku8.net）注册账号。登录后可将网页端书架单向导入到本地书架。</string>
+    <string name="settings_account_username">用户名</string>
+    <string name="settings_account_password">密码</string>
+    <string name="settings_account_logout_confirm_title">退出当前账号</string>
+    <string name="settings_account_logout_confirm_msg">退出后将自动切回内置共享账号，本地书架及阅读进度不受影响。</string>
+    <string name="settings_account_current">当前账号：%1$s</string>
+    <string name="settings_account_sync_bookshelf_tip">云端书架同步为单向读取，将网页端收藏的小说批量同步到本地书架。</string>
+    <string name="settings_account_login_and_sync">登录并同步</string>
+    <string name="settings_account_sync_now">立即同步</string>
+    <string name="settings_account_switch">切换账号</string>
     <string name="settings_section_appearance">外观</string>
     <string name="settings_section_storage">存储</string>
     <string name="settings_section_experimental">实验性</string>

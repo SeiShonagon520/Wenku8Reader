@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Animation
@@ -23,17 +24,32 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -44,6 +60,7 @@ import com.hoshino.wenku8reader.data.UpdateCenter
 import com.hoshino.wenku8reader.data.Wenku8Hosts
 import com.hoshino.wenku8reader.data.local.ReaderSettingsState
 import com.hoshino.wenku8reader.ui.components.ExpressiveSlider
+import com.hoshino.wenku8reader.ui.components.HapticFeedback
 import com.hoshino.wenku8reader.ui.components.SegmentedColumn
 import com.hoshino.wenku8reader.ui.components.SegmentedDropdownItem
 import com.hoshino.wenku8reader.ui.components.SegmentedListItem
@@ -56,25 +73,254 @@ import com.hoshino.wenku8reader.ui.theme.UiStyle
 // ------------------------------------------------------------------ //
 
 /**
- * 账号分组：**说明性**展示（无交互，符合产品设计）。
- *
- * 本应用全程使用内置共享账号取数，不提供登录、退出或切换账号的入口，
- * 因此这里不需要（也不应该）展示"未登录 / 某个用户名"这类用户可切换的状态——
- * 那会暗示存在用户可操作但实际不存在的登录流程。
- * 此前的实现只写死一句提示、与运行状态无关，容易被误读为"能操作却没做"，
- * 现改为明确说明"无需登录/切换"，语义与真实行为一致。
+ * 账号分组：支持登录个人账号并单向同步云端书架，也可切换回内置免密账号。
  */
 @Composable
-internal fun AccountSection() {
-    SegmentedColumn(
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-        title = stringResource(R.string.settings_section_account),
-        items = listOf {
+internal fun AccountSection(vm: SettingsViewModel) {
+    val context = LocalContext.current
+    val currentUsername by vm.currentUsername.collectAsStateWithLifecycle()
+    val isCustomAccount by vm.isCustomAccount.collectAsStateWithLifecycle()
+    val isSyncing by vm.isSyncingBookshelf.collectAsStateWithLifecycle()
+
+    var showLoginDialog by remember { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    val items = mutableListOf<@Composable () -> Unit>()
+
+    if (isCustomAccount) {
+        // 个人账号卡片
+        items.add {
+            SegmentedListItem(
+                leadingContent = {
+                    Icon(
+                        Icons.Filled.AccountCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                },
+                headlineContent = {
+                    Text(
+                        stringResource(R.string.settings_account_personal, currentUsername ?: ""),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                },
+                supportingContent = { Text(stringResource(R.string.settings_account_personal_desc)) },
+                trailingContent = {
+                    TextButton(onClick = { showLogoutDialog = true }) {
+                        Text(stringResource(R.string.settings_account_logout), color = MaterialTheme.colorScheme.error)
+                    }
+                },
+            )
+        }
+        // 云端书架同步项
+        items.add {
+            SegmentedListItem(
+                leadingContent = {
+                    if (isSyncing) {
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            Icons.Filled.Sync,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                },
+                headlineContent = { Text(stringResource(R.string.settings_account_sync_bookshelf)) },
+                supportingContent = {
+                    Text(
+                        if (isSyncing) stringResource(R.string.settings_account_syncing)
+                        else "拉取网页端个人收藏，单向导入至本地书架"
+                    )
+                },
+                trailingContent = {
+                    FilledTonalButton(
+                        onClick = {
+                            vm.syncCloudBookshelf { _, msg ->
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        enabled = !isSyncing,
+                    ) {
+                        Text(if (isSyncing) "同步中" else "立即同步")
+                    }
+                },
+            )
+        }
+    } else {
+        // 内置账号展示
+        items.add {
             SegmentedListItem(
                 leadingContent = { Icon(Icons.Filled.AccountCircle, contentDescription = null) },
                 headlineContent = { Text(stringResource(R.string.settings_builtin_account)) },
                 supportingContent = { Text(stringResource(R.string.settings_account_builtin_desc)) },
+                trailingContent = {
+                    Button(onClick = { showLoginDialog = true }) {
+                        Text(stringResource(R.string.settings_account_login))
+                    }
+                },
             )
+        }
+    }
+
+    SegmentedColumn(
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
+        title = stringResource(R.string.settings_section_account),
+        items = items,
+    )
+
+    // 登录个人账号弹窗
+    if (showLoginDialog) {
+        PersonalAccountLoginDialog(
+            onDismiss = { showLoginDialog = false },
+            onLogin = { user, pass, onFinished ->
+                vm.login(user, pass) { success, msg ->
+                    onFinished(success, msg)
+                    if (success) {
+                        showLoginDialog = false
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        // 登录成功后自动拉取一次云端书架
+                        vm.syncCloudBookshelf { _, syncMsg ->
+                            Toast.makeText(context, syncMsg, Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                    }
+                }
+            },
+        )
+    }
+
+    // 退出账号确认弹窗
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text(stringResource(R.string.settings_account_logout_confirm_title)) },
+            text = { Text(stringResource(R.string.settings_account_logout_confirm_msg)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLogoutDialog = false
+                        vm.logout()
+                        Toast.makeText(context, "已退出登录，恢复内置共享账号", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text(stringResource(R.string.action_confirm), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+}
+
+/** 个人账号登录输入弹窗 */
+@Composable
+private fun PersonalAccountLoginDialog(
+    onDismiss: () -> Unit,
+    onLogin: (user: String, pass: String, onFinished: (Boolean, String) -> Unit) -> Unit,
+) {
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = { if (!isLoading) onDismiss() },
+        title = { Text(stringResource(R.string.settings_account_login_title)) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_account_login_tip),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = {
+                        username = it
+                        errorMessage = null
+                    },
+                    label = { Text(stringResource(R.string.settings_account_username)) },
+                    singleLine = true,
+                    enabled = !isLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = {
+                        password = it
+                        errorMessage = null
+                    },
+                    label = { Text(stringResource(R.string.settings_account_password)) },
+                    singleLine = true,
+                    enabled = !isLoading,
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                                contentDescription = null,
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage ?: "",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (username.isBlank() || password.isBlank()) {
+                        errorMessage = "请输入账号和密码"
+                        return@Button
+                    }
+                    isLoading = true
+                    errorMessage = null
+                    onLogin(username, password) { success, msg ->
+                        isLoading = false
+                        if (!success) {
+                            errorMessage = msg
+                        }
+                    }
+                },
+                enabled = !isLoading && username.isNotBlank() && password.isNotBlank(),
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    Text(stringResource(R.string.settings_account_login))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isLoading,
+            ) {
+                Text(stringResource(R.string.action_cancel))
+            }
         },
     )
 }
@@ -106,7 +352,7 @@ internal fun AppearanceSection(
                 SegmentedDropdownItem(
                     icon = Icons.Filled.Language,
                     title = stringResource(R.string.settings_language),
-                    summary = stringResource(R.string.settings_language_summary),
+                    summary = null,
                     items = languageOptions.map { (_, res) -> stringResource(res) },
                     selectedIndex = languageOptions.indexOfKey(rs.appLanguage),
                     onItemSelected = { index ->
@@ -124,7 +370,7 @@ internal fun AppearanceSection(
                 SegmentedDropdownItem(
                     icon = Icons.Filled.DarkMode,
                     title = stringResource(R.string.settings_dark_mode),
-                    summary = stringResource(R.string.settings_dark_mode_summary),
+                    summary = null,
                     items = darkModeLabels,
                     selectedIndex = darkModeOptions.indexOfKey(rs.darkMode),
                     onItemSelected = { index ->
@@ -136,7 +382,7 @@ internal fun AppearanceSection(
                 SegmentedSwitchItem(
                     icon = Icons.Filled.DarkMode,
                     title = stringResource(R.string.settings_amoled),
-                    summary = stringResource(R.string.settings_amoled_summary),
+                    summary = null,
                     checked = rs.amoled,
                     onCheckedChange = vm::setAmoled,
                 )
@@ -145,7 +391,7 @@ internal fun AppearanceSection(
                 SegmentedSwitchItem(
                     icon = Icons.Filled.Palette,
                     title = stringResource(R.string.settings_dynamic_color),
-                    summary = stringResource(R.string.settings_dynamic_color_summary),
+                    summary = null,
                     checked = rs.dynamicColor,
                     onCheckedChange = vm::setDynamicColor,
                 )
@@ -154,7 +400,7 @@ internal fun AppearanceSection(
                 SegmentedSwitchItem(
                     icon = Icons.Filled.Animation,
                     title = stringResource(R.string.settings_expressive_motion),
-                    summary = stringResource(R.string.settings_expressive_motion_summary),
+                    summary = null,
                     checked = rs.expressiveMotion,
                     onCheckedChange = vm::setExpressiveMotion,
                 )
@@ -241,6 +487,7 @@ internal fun GeneralSection(
     rs: ReaderSettingsState,
     vm: SettingsViewModel,
 ) {
+    val context = LocalContext.current
     SegmentedColumn(
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
         title = stringResource(R.string.settings_section_general),
@@ -249,9 +496,14 @@ internal fun GeneralSection(
                 SegmentedSwitchItem(
                     icon = Icons.Filled.Vibration,
                     title = stringResource(R.string.settings_haptics),
-                    summary = stringResource(R.string.settings_haptics_summary),
+                    summary = null,
                     checked = rs.hapticsEnabled,
-                    onCheckedChange = vm::setHapticsEnabled,
+                    onCheckedChange = { enabled ->
+                        vm.setHapticsEnabled(enabled)
+                        if (enabled) {
+                            HapticFeedback.vibrate(context, rs.hapticsStrength)
+                        }
+                    },
                 )
             },
         ),
@@ -264,6 +516,7 @@ internal fun HapticsStrengthSection(
     rs: ReaderSettingsState,
     vm: SettingsViewModel,
 ) {
+    val context = LocalContext.current
     SegmentedColumn(
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
         title = stringResource(R.string.settings_haptics_strength_title),
@@ -288,7 +541,20 @@ internal fun HapticsStrengthSection(
                         }
                         ExpressiveSlider(
                             value = rs.hapticsStrength.toFloat(),
-                            onValueChange = { vm.setHapticsStrength(it.toInt()) },
+                            onValueChange = { newValue ->
+                                val intVal = newValue.toInt()
+                                if (intVal != rs.hapticsStrength) {
+                                    vm.setHapticsStrength(intVal)
+                                    // 调节滑动跨越每 10% 步进或极值时触发试震预览
+                                    if (intVal % 10 == 0 || intVal == 1 || intVal == 100) {
+                                        HapticFeedback.vibrate(context, intVal)
+                                    }
+                                }
+                            },
+                            onValueChangeFinished = {
+                                // 调节完毕松手时以最新力度触发试震
+                                HapticFeedback.vibrate(context, rs.hapticsStrength)
+                            },
                             valueRange = 0f..100f,
                         )
                     }

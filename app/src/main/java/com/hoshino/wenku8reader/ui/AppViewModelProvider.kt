@@ -32,6 +32,8 @@ object AppViewModelProvider {
                 application().container.readingProgressStore,
                 application().container.storage,
                 application().container.updateCenter,
+                application().container.preferences,
+                application().container.libraryStore,
             )
         }
         initializer {
@@ -39,6 +41,7 @@ object AppViewModelProvider {
                 application().container.libraryStore,
                 application().container.readingProgressStore,
                 application().container.preferences,
+                application().container.client,
             )
         }
         initializer {

@@ -82,8 +82,9 @@ class UpdateCenter(
      */
     fun check(manual: Boolean = false) {
         if (_state.value.checking) return
-        // 功耗优化：启动自动检查最多 24h 一次（减少网络无线电）；手动检查不受限
+        // 功耗与用户体验：启动自动检查需遵循设置（默认关闭不弹窗，最多 24h 一次）；手动检查不受限
         if (!manual) {
+            if (!settings.flow.value.checkUpdatesOnStartup) return
             val now = System.currentTimeMillis()
             if (now - preferences.lastUpdateCheckAt < 24L * 60 * 60 * 1000) return
             preferences.lastUpdateCheckAt = now

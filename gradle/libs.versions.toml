@@ -41,6 +41,10 @@ junit = "4.13.2"
 # android.jar 里的 org.json 在单元测试中只是抛 "Stub!" 的空壳，测试运行时用这个纯 Java 实现顶上
 json = "20240303"
 
+haze = "1.3.1"
+telephoto = "0.14.0"
+vico = "2.0.0-beta.2"
+
 [libraries]
 # ---- Compose ----
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
@@ -83,6 +87,12 @@ cronet-embedded = { module = "org.chromium.net:cronet-embedded", version.ref = "
 # ---- 测试 ----
 junit = { module = "junit:junit", version.ref = "junit" }
 org-json = { module = "org.json:json", version.ref = "json" }
+
+# ---- 高精细度 UI 增强库 ----
+haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
+haze-materials = { module = "dev.chrisbanes.haze:haze-materials", version.ref = "haze" }
+telephoto-zoomable-image-coil = { module = "me.saket.telephoto:zoomable-image-coil", version.ref = "telephoto" }
+vico-compose-m3 = { module = "com.patrykandpatrick.vico:compose-m3", version.ref = "vico" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

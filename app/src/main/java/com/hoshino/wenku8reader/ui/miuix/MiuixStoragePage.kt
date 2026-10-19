@@ -2,13 +2,16 @@ package com.hoshino.wenku8reader.ui.miuix
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
@@ -95,21 +98,36 @@ fun MiuixStoragePage(
             ) {
                 MiuixRow(
                     title = stringResource(R.string.settings_cache_total_cache),
-                    summary = formatByteSize(stats.cacheDirTotal) + " · " +
-                        stringResource(R.string.settings_cache_total_cache_desc),
                     icon = Icons.Filled.Storage,
+                    trailing = {
+                        Text(
+                            text = formatByteSize(stats.cacheDirTotal),
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onSurfaceSecondary,
+                        )
+                    },
                 )
                 MiuixRowDivider()
                 MiuixRow(
                     title = stringResource(R.string.settings_cache_total_data),
-                    summary = formatByteSize(stats.dataDirTotal) + " · " +
-                        stringResource(R.string.settings_cache_total_data_desc),
+                    trailing = {
+                        Text(
+                            text = formatByteSize(stats.dataDirTotal),
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onSurfaceSecondary,
+                        )
+                    },
                 )
                 MiuixRowDivider()
                 MiuixRow(
                     title = stringResource(R.string.settings_cache_code_cache),
-                    summary = formatByteSize(stats.codeCache) + " · " +
-                        stringResource(R.string.settings_cache_code_cache_desc),
+                    trailing = {
+                        Text(
+                            text = formatByteSize(stats.codeCache),
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onSurfaceSecondary,
+                        )
+                    },
                 )
             }
 
@@ -120,24 +138,21 @@ fun MiuixStoragePage(
             ) {
                 MiuixClearRow(
                     title = stringResource(R.string.settings_cache_images),
-                    summary = formatByteSize(stats.imageCache) + " · " +
-                        stringResource(R.string.settings_cache_images_desc),
+                    sizeText = formatByteSize(stats.imageCache),
                     icon = Icons.Filled.Image,
                     onClear = vm::clearImageCache,
                 )
                 MiuixRowDivider()
                 MiuixClearRow(
                     title = stringResource(R.string.settings_cache_updates),
-                    summary = formatByteSize(stats.updatePackage) + " · " +
-                        stringResource(R.string.settings_cache_updates_desc),
+                    sizeText = formatByteSize(stats.updatePackage),
                     icon = Icons.Filled.SystemUpdate,
                     onClear = vm::clearUpdatePackages,
                 )
                 MiuixRowDivider()
                 MiuixClearRow(
                     title = stringResource(R.string.settings_cache_other_title),
-                    summary = formatByteSize(stats.webViewCache + stats.tempFiles + stats.otherCache) + " · " +
-                        stringResource(R.string.settings_cache_other_desc),
+                    sizeText = formatByteSize(stats.webViewCache + stats.tempFiles + stats.otherCache),
                     icon = Icons.Filled.Public,
                     onClear = vm::clearOtherCaches,
                 )
@@ -157,17 +172,19 @@ fun MiuixStoragePage(
             ) {
                 MiuixRow(
                     title = stringResource(R.string.settings_cache_size),
-                    summary = stringResource(
-                        R.string.settings_cache_size_summary,
-                        formatByteSize(stats.htmlCache),
-                        rs.cacheMaxMb,
-                    ),
+                    trailing = {
+                        Text(
+                            text = "${formatByteSize(stats.htmlCache)} / ${rs.cacheMaxMb} MB",
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onSurfaceSecondary,
+                        )
+                    },
                 )
                 val maxOptions = listOf(30, 50, 100, 200, 500)
                 MiuixRowDivider()
                 MiuixDropdownRow(
                     title = stringResource(R.string.settings_cache_max),
-                    summary = stringResource(R.string.settings_cache_max_summary),
+                    summary = null,
                     icon = Icons.Filled.Storage,
                     items = maxOptions.map { "$it MB" },
                     selectedIndex = maxOptions.indexOf(rs.cacheMaxMb).coerceAtLeast(0),
@@ -177,7 +194,7 @@ fun MiuixStoragePage(
                     MiuixRowDivider()
                     MiuixClearRow(
                         title = stringResource(category.labelRes),
-                        summary = formatByteSize(cacheSizes[category.key] ?: 0L),
+                        sizeText = formatByteSize(cacheSizes[category.key] ?: 0L),
                         onClear = { vm.clearCache(category.key) },
                     )
                 }
@@ -190,8 +207,14 @@ fun MiuixStoragePage(
             ) {
                 MiuixRow(
                     title = stringResource(R.string.settings_cache_reading_data),
-                    summary = formatByteSize(stats.preferences) + " · " +
-                        stringResource(R.string.settings_cache_reading_data_desc),
+                    icon = Icons.Filled.History,
+                    trailing = {
+                        Text(
+                            text = formatByteSize(stats.preferences),
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onSurfaceSecondary,
+                        )
+                    },
                 )
                 MiuixRowDivider()
                 MiuixArrowRow(
@@ -254,7 +277,8 @@ fun MiuixStoragePage(
 @Composable
 private fun MiuixClearRow(
     title: String,
-    summary: String?,
+    sizeText: String? = null,
+    summary: String? = null,
     onClear: () -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
 ) {
@@ -263,14 +287,24 @@ private fun MiuixClearRow(
         summary = summary,
         icon = icon,
         trailing = {
-            Text(
-                text = stringResource(R.string.settings_cache_clear),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.primary,
-                modifier = Modifier
-                    .clickable(onClick = onClear)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (!sizeText.isNullOrEmpty()) {
+                    Text(
+                        text = sizeText,
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onSurfaceSecondary,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(
+                    text = stringResource(R.string.settings_cache_clear),
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable(onClick = onClear)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
         },
     )
 }

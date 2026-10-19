@@ -39,6 +39,7 @@ import com.hoshino.wenku8reader.data.Wenku8Hosts
 import com.hoshino.wenku8reader.data.local.ReaderSettingsState
 import com.hoshino.wenku8reader.di.AppContainer
 import com.hoshino.wenku8reader.ui.AppViewModelProvider
+import com.hoshino.wenku8reader.ui.components.HapticFeedback
 import com.hoshino.wenku8reader.ui.settings.SettingsViewModel
 import com.hoshino.wenku8reader.ui.theme.UiStyle
 import kotlin.math.roundToInt
@@ -70,7 +71,7 @@ fun MiuixAppearancePage(
         MiuixSection(title = stringResource(R.string.settings_section_appearance)) {
             MiuixDropdownRow(
                 title = stringResource(R.string.settings_language),
-                summary = stringResource(R.string.settings_language_summary),
+                summary = null,
                 icon = Icons.Filled.Language,
                 items = languageOptions.map { stringResource(it.second) },
                 selectedIndex = languageOptions.indexOfFirst { it.first == rs.appLanguage }
@@ -86,7 +87,7 @@ fun MiuixAppearancePage(
             MiuixRowDivider()
             MiuixDropdownRow(
                 title = stringResource(R.string.settings_dark_mode),
-                summary = stringResource(R.string.settings_dark_mode_summary),
+                summary = null,
                 icon = Icons.Filled.DarkMode,
                 items = darkModeOptions.map { stringResource(it.second) },
                 selectedIndex = darkModeOptions.indexOfFirst { it.first == rs.darkMode }
@@ -100,12 +101,18 @@ fun MiuixAppearancePage(
         // 通用：触觉反馈（与 Material 版同在一处分组的做法一致）。
         // 这是应用行为设置、不是 MD3 专属项，所以 MIUIX 下同样要能调。
         MiuixSection(title = stringResource(R.string.settings_section_general)) {
+            val context = LocalContext.current
             MiuixSwitchRow(
                 title = stringResource(R.string.settings_haptics),
-                summary = stringResource(R.string.settings_haptics_summary),
+                summary = null,
                 icon = Icons.Filled.Vibration,
                 checked = rs.hapticsEnabled,
-                onCheckedChange = vm::setHapticsEnabled,
+                onCheckedChange = { enabled ->
+                    vm.setHapticsEnabled(enabled)
+                    if (enabled) {
+                        HapticFeedback.vibrate(context, rs.hapticsStrength)
+                    }
+                },
             )
             if (rs.hapticsEnabled) {
                 MiuixRowDivider()
@@ -113,7 +120,20 @@ fun MiuixAppearancePage(
                     title = stringResource(R.string.settings_haptics_strength),
                     valueText = "${rs.hapticsStrength}%",
                     value = rs.hapticsStrength.toFloat(),
-                    onValueChange = { vm.setHapticsStrength(it.roundToInt()) },
+                    onValueChange = { newValue ->
+                        val intVal = newValue.roundToInt()
+                        if (intVal != rs.hapticsStrength) {
+                            vm.setHapticsStrength(intVal)
+                            // 调节滑动跨越每 10% 步进或极值时触发试震预览
+                            if (intVal % 10 == 0 || intVal == 1 || intVal == 100) {
+                                HapticFeedback.vibrate(context, intVal)
+                            }
+                        }
+                    },
+                    onValueChangeFinished = {
+                        // 调节完毕松手时以最新力度触发试震
+                        HapticFeedback.vibrate(context, rs.hapticsStrength)
+                    },
                     valueRange = 0f..100f,
                 )
             }
