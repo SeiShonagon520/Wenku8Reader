@@ -232,13 +232,17 @@ class SettingsViewModel(
         }
         viewModelScope.launch(Dispatchers.IO) {
             val res = client.login(trimmedUser, trimmedPass)
+            val credentialsSaved = res.success &&
+                preferences.saveCustomAccount(trimmedUser, trimmedPass)
             withContext(Dispatchers.Main) {
                 if (res.success) {
-                    preferences.customUsername = trimmedUser
-                    preferences.customPassword = trimmedPass
                     _currentUsername.value = trimmedUser
                     _isCustomAccount.value = true
-                    onResult(true, "登录成功，已绑定个人账号")
+                    onResult(
+                        true,
+                        if (credentialsSaved) "登录成功，已绑定个人账号"
+                        else "登录成功，但密码未能安全保存；会话失效后需要重新登录",
+                    )
                 } else {
                     val msg = res.message.ifBlank { "登录失败，请检查账号密码或网络连接" }
                     onResult(false, msg)

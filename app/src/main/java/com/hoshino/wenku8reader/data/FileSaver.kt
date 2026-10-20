@@ -8,6 +8,8 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import java.io.File
+import java.io.FileOutputStream
+import java.io.OutputStream
 
 /** Saves downloaded books to the public Downloads/Wenku8 folder. */
 object FileSaver {
@@ -18,11 +20,21 @@ object FileSaver {
     /** Returns a human readable location, or null on failure. */
     fun saveDownload(context: Context, displayName: String, mime: String,
                      bytes: ByteArray): String? {
+        return saveDownload(context, displayName, mime) { output -> output.write(bytes) }
+    }
+
+    /** Writes a download directly to its destination without first buffering the whole file. */
+    fun saveDownload(
+        context: Context,
+        displayName: String,
+        mime: String,
+        write: (OutputStream) -> Unit,
+    ): String? {
         val safeName = sanitize(displayName)
         return if (Build.VERSION.SDK_INT >= 29) {
-            saveMediaStore(context, safeName, mime, bytes)
+            saveMediaStore(context, safeName, mime, write)
         } else {
-            saveAppDir(context, safeName, bytes)
+            saveAppDir(context, safeName, write)
         }
     }
 
@@ -38,8 +50,12 @@ object FileSaver {
      * 另外按官方建议用 `IS_PENDING` 写入：写入期间对其他应用不可见，
      * 避免 Downloads/图库在写入中途看到半截文件。
      */
-    private fun saveMediaStore(context: Context, name: String, mime: String,
-                               bytes: ByteArray): String? {
+    private fun saveMediaStore(
+        context: Context,
+        name: String,
+        mime: String,
+        write: (OutputStream) -> Unit,
+    ): String? {
         val resolver = context.contentResolver
         val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
         val relativePath = Environment.DIRECTORY_DOWNLOADS + "/" + RELATIVE_DIR
@@ -55,7 +71,7 @@ object FileSaver {
         val uri = resolver.insert(collection, values) ?: return null
 
         val written = runCatching {
-            resolver.openOutputStream(uri)?.use { out -> out.write(bytes) } != null
+            resolver.openOutputStream(uri)?.use { out -> write(out) } != null
         }.getOrDefault(false)
         if (!written) {
             runCatching { resolver.delete(uri, null, null) }
@@ -105,18 +121,41 @@ object FileSaver {
     }
 
     /** API 28 及以下的回退：写应用私有外部目录。 */
-    private fun saveAppDir(context: Context, name: String, bytes: ByteArray): String? {
+    private fun saveAppDir(
+        context: Context,
+        name: String,
+        write: (OutputStream) -> Unit,
+    ): String? {
         val dir = File(
             context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir,
             RELATIVE_DIR,
         )
-        if (!dir.exists()) dir.mkdirs()
-        val f = File(dir, name)
+        if (!dir.exists() && !dir.mkdirs()) return null
+        val target = File(dir, name)
+        val backup = File(dir, "$name.bak")
+        val temp = runCatching { File.createTempFile("w8r-", ".tmp", dir) }.getOrNull()
+            ?: return null
         return try {
-            f.writeBytes(bytes)
-            f.absolutePath
+            FileOutputStream(temp).use(write)
+            if (backup.exists()) {
+                if (!target.exists()) {
+                    if (!backup.renameTo(target)) return null
+                } else {
+                    backup.delete()
+                }
+            }
+            if (target.exists() && !target.renameTo(backup)) return null
+            if (!temp.renameTo(target)) {
+                if (backup.exists()) backup.renameTo(target)
+                return null
+            }
+            backup.delete()
+            target.absolutePath
         } catch (e: Exception) {
+            if (!target.exists() && backup.exists()) backup.renameTo(target)
             null
+        } finally {
+            temp.delete()
         }
     }
 

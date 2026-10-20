@@ -66,9 +66,8 @@ class AppContainer(context: Context) {
         { readerSettings.flow.value.primaryMirror },
         {
             val user = preferences.customUsername
-            val pass = preferences.customPassword
-            if (!user.isNullOrBlank() && !pass.isNullOrBlank()) {
-                user to pass
+            if (!user.isNullOrBlank()) {
+                preferences.customPassword?.let { user to it }
             } else {
                 DefaultAccount.USERNAME to DefaultAccount.PASSWORD
             }

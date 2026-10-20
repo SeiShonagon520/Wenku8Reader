@@ -9,15 +9,25 @@ import android.content.Context
  * - 书架与阅读进度已迁到 Room（见 [LibraryStore] / [ReadingProgressStore]）；
  * - 阅读外观与主题设置由 [ReaderSettings] 承担。
  *
- * 安全说明：此处**不再持久化任何账号密码**。
- * 旧版本曾提供 `saveCredentials/username/password`（明文写入未加密的 `account` 偏好），
- * 经全仓检索确认从未被调用，属于纯粹的安全暴露面，故整体移除——登录态由
- * [com.hoshino.wenku8reader.data.CookieStore] 持久化的会话 Cookie 承担，
- * 无需保存密码即可免登录。
+ * 密码不保存在 `ui` 偏好中；可选的个人账号密码单独由 [CredentialStore] 加密，
+ * 且其偏好文件从 Android 备份与设备迁移中排除。旧版明文密码会在初始化时迁移并清除。
  */
 class AppPreferences(context: Context) {
 
     private val ui = context.getSharedPreferences("ui", Context.MODE_PRIVATE)
+    private val credentialStore = CredentialStore(context)
+
+    init {
+        // Older builds kept the password as plaintext in ui.xml. Migrate it before deleting
+        // the legacy value; if Keystore is unavailable, discard the password and require a
+        // fresh login after the current session expires rather than keep backing up plaintext.
+        val legacyUsername = ui.getString("custom_username", null)
+        val legacyPassword = ui.getString("custom_password", null)
+        if (legacyUsername != null || legacyPassword != null) {
+            credentialStore.migrateLegacy(legacyUsername, legacyPassword)
+            ui.edit().remove("custom_username").remove("custom_password").commit()
+        }
+    }
 
     var bookcaseSortType: String
         get() = ui.getString("bookcase_sort", "default") ?: "default"
@@ -54,25 +64,25 @@ class AppPreferences(context: Context) {
 
     // ---- 用户个人账号 ----
     /** 用户自定义文库8账号用户名（为空时使用内置共享账号） */
-    var customUsername: String?
-        get() = ui.getString("custom_username", null)
-        set(value) {
-            ui.edit().putString("custom_username", value).apply()
-        }
+    val customUsername: String?
+        get() = credentialStore.username()
 
-    /** 用户自定义文库8账号密码 */
-    var customPassword: String?
-        get() = ui.getString("custom_password", null)
-        set(value) {
-            ui.edit().putString("custom_password", value).apply()
-        }
+    /** 用户自定义文库8账号密码；仅在 Android Keystore 加密后落盘。 */
+    val customPassword: String?
+        get() = credentialStore.password()
 
     /** 当前是否处于个人账号登录状态 */
     val isCustomAccount: Boolean
-        get() = !customUsername.isNullOrBlank() && !customPassword.isNullOrBlank()
+        get() = !customUsername.isNullOrBlank()
+
+    /** 保存账号名并加密保存密码；返回 false 表示密码未能安全持久化。 */
+    fun saveCustomAccount(username: String, password: String): Boolean {
+        return credentialStore.saveAccount(username, password)
+    }
 
     /** 清理个人凭据，退出登录并恢复内置共享账号 */
     fun clearCustomAccount() {
         ui.edit().remove("custom_username").remove("custom_password").apply()
+        credentialStore.clearAccount()
     }
 }

@@ -118,13 +118,17 @@ class BookcaseViewModel(
             _isSyncing.value = true
             try {
                 val res = client.login(trimmedUser, trimmedPass)
+                val credentialsSaved = res.success &&
+                    preferences.saveCustomAccount(trimmedUser, trimmedPass)
                 withContext(Dispatchers.Main) {
                     if (res.success) {
-                        preferences.customUsername = trimmedUser
-                        preferences.customPassword = trimmedPass
                         _currentUsername.value = trimmedUser
                         _isCustomAccount.value = true
-                        onResult(true, "登录成功，已绑定个人账号")
+                        onResult(
+                            true,
+                            if (credentialsSaved) "登录成功，已绑定个人账号"
+                            else "登录成功，但密码未能安全保存；会话失效后需要重新登录",
+                        )
                     } else {
                         val msg = res.message.ifBlank { "登录失败，请检查账号密码或网络连接" }
                         onResult(false, msg)
@@ -141,7 +145,19 @@ class BookcaseViewModel(
         preferences.clearCustomAccount()
         _currentUsername.value = null
         _isCustomAccount.value = false
-        onResult("已退出当前账号，已切换为访客模式")
+        viewModelScope.launch(Dispatchers.IO) {
+            client.clearUserSession()
+            withContext(Dispatchers.Main) {
+                onResult("已退出当前账号，已切换为访客模式")
+            }
+            try {
+                client.ensureLoggedIn()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Local logout is complete even when the shared account cannot reconnect.
+            }
+        }
     }
 
     /**

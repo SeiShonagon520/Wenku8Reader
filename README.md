@@ -97,8 +97,8 @@ cd Wenku8Reader
 - **架构模式**：MVVM + Clean Architecture 单向数据流
 - **UI 体系**：Material Design 3 (Expressive) / Miuix KMP
 - **数据持久化**：Room (SQLite) + Jetpack DataStore (Preferences)
-- **网络与解析**：OkHttp 5 + Cronet + 正则与流式 HTML 解析器
-- **图片加载**：Coil 3 (支持内存/磁盘双重缓存与动图加载)
+- **网络与解析**：OkHttp 4.12 + Cronet + 正则与流式 HTML 解析器
+- **图片加载**：Coil 2.7 (支持内存/磁盘双重缓存与动图加载)
 - **图表组件**：Vico 2.0 (现代 Compose 声明式图表)
 - **繁简处理**：opencc4j
 
