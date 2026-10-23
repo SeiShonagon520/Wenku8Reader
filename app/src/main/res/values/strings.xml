@@ -99,6 +99,11 @@
     <string name="bookcase_filter_reading">在读</string>
     <string name="bookcase_filter_finished">已读完</string>
     <string name="bookcase_filter_not_started">未开始</string>
+    <string name="bookcase_source_all">全部来源</string>
+    <string name="bookcase_source_filter_label">收藏来源</string>
+    <string name="bookcase_source_local">本地收藏</string>
+    <string name="bookcase_source_account">账号收藏</string>
+    <string name="bookcase_source_both">本地 + 账号</string>
     <string name="bookcase_no_matches">没有找到符合条件的书</string>
     <string name="bookcase_sort_reverse">倒序</string>
     <string name="bookcase_view_mode">视图模式</string>
@@ -237,7 +242,7 @@
     <string name="settings_account_logout_confirm_title">退出当前账号</string>
     <string name="settings_account_logout_confirm_msg">退出后将自动切回内置共享账号，本地书架及阅读进度不受影响。</string>
     <string name="settings_account_current">当前账号：%1$s</string>
-    <string name="settings_account_sync_bookshelf_tip">云端书架同步为单向读取，将网页端收藏的小说批量同步到本地书架。</string>
+    <string name="settings_account_sync_bookshelf_tip">云端书架只读同步。账号收藏与本地收藏分别标记；同一本书可以同时属于两类，取消本地收藏不会影响账号收藏。</string>
     <string name="settings_account_login_and_sync">登录并同步</string>
     <string name="settings_account_sync_now">立即同步</string>
     <string name="settings_account_switch">切换账号</string>

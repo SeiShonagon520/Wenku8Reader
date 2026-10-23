@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  */
 @Database(
     entities = [BookEntity::class, ReadingProgressEntity::class, DownloadTaskEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -54,9 +54,23 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Existing rows have no source metadata. Keep them as local favorites so no
+                // existing bookshelf entry disappears; a later account sync can also mark it
+                // as an account favorite when it appears in the remote bookshelf.
+                db.execSQL(
+                    "ALTER TABLE books ADD COLUMN isLocalFavorite INTEGER NOT NULL DEFAULT 1"
+                )
+                db.execSQL(
+                    "ALTER TABLE books ADD COLUMN isAccountFavorite INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }

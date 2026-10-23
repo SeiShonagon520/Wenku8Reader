@@ -19,6 +19,14 @@ data class LibraryBook(
     val book: BookInfo,
     val shelf: String = "默认",
     val addedAt: Long = 0L,
+    val isLocalFavorite: Boolean = true,
+    val isAccountFavorite: Boolean = false,
+)
+
+data class AccountFavoriteSyncSummary(
+    val totalAccountFavorites: Int,
+    val newBooks: Int,
+    val newlyMarkedAccountFavorites: Int,
 )
 
 /**
@@ -50,10 +58,10 @@ class LibraryStore internal constructor(
         return dao.containsBook(bookId)
     }
 
-    /** 观察某本书是否在书架（详情页收藏星标的数据源）。 */
+    /** 观察某本书是否属于本地收藏（详情页收藏星标的数据源）。 */
     fun observeContains(bookId: Int): Flow<Boolean> = flow {
         migration.ensure()
-        emitAll(dao.observeBook(bookId).map { it != null })
+        emitAll(dao.observeBook(bookId).map { it?.isLocalFavorite == true })
     }
 
     /**
@@ -62,18 +70,64 @@ class LibraryStore internal constructor(
      */
     suspend fun add(book: BookInfo, shelf: String = "默认") {
         migration.ensure()
-        val previous = dao.book(book.id)
-        dao.upsertBook(
-            book.toEntity(shelf = shelf, addedAt = previous?.addedAt ?: System.currentTimeMillis()),
+        dao.addLocalFavorite(
+            book.toEntity(shelf = shelf, addedAt = System.currentTimeMillis()),
         )
     }
 
-    /** 移出书架。只动书架，不碰阅读进度（与旧实现一致）。 */
-    suspend fun remove(bookId: Int) {
+    /** Remove only the device-only favorite; a remote account favorite keeps the row. */
+    suspend fun removeLocalFavorite(bookId: Int) {
         migration.ensure()
-        dao.deleteBook(bookId)
+        dao.removeLocalFavorite(bookId)
+    }
+
+    /** Merge account favorites into the local library without changing local-favorite flags. */
+    suspend fun syncAccountFavorites(books: List<BookInfo>): AccountFavoriteSyncSummary {
+        migration.ensure()
+        val existingById = dao.books().associateBy { it.id }
+        val now = System.currentTimeMillis()
+        val uniqueBooks = books.distinctBy { it.id }
+        val accountRows = uniqueBooks.map { book ->
+            val existing = existingById[book.id]
+            val snapshot = if (existing == null) {
+                book
+            } else {
+                book.copy(
+                    title = book.title.ifBlank { existing.title },
+                    author = book.author.ifBlank { existing.author },
+                    status = book.status.ifBlank { existing.status },
+                    lastUpdate = book.lastUpdate.ifBlank { existing.lastUpdate },
+                    wordCount = book.wordCount.ifBlank { existing.wordCount },
+                    description = book.description.ifBlank { existing.description },
+                    coverUrl = book.coverUrl ?: existing.coverUrl,
+                    groupId = book.groupId ?: existing.groupId,
+                    tags = book.tags.ifEmpty { existing.tags },
+                )
+            }
+            snapshot.toEntity(
+                shelf = existing?.shelf ?: "默认",
+                addedAt = existing?.addedAt ?: now,
+            ).copy(
+                isLocalFavorite = existing?.isLocalFavorite ?: false,
+                isAccountFavorite = true,
+            )
+        }
+        dao.mergeAccountFavorites(accountRows)
+        return AccountFavoriteSyncSummary(
+            totalAccountFavorites = uniqueBooks.size,
+            newBooks = accountRows.count { existingById[it.id] == null },
+            newlyMarkedAccountFavorites = accountRows.count {
+                existingById[it.id]?.isAccountFavorite != true
+            },
+        )
     }
 }
 
 private fun BookEntity.toLibraryBook(): LibraryBook =
-    LibraryBook(book = toBookInfo(), shelf = shelf, addedAt = addedAt)
+    LibraryBook(
+        book = toBookInfo(),
+        shelf = shelf,
+        addedAt = addedAt,
+        isLocalFavorite = isLocalFavorite,
+        isAccountFavorite = isAccountFavorite,
+    )

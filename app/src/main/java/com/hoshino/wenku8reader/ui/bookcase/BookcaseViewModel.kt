@@ -43,6 +43,12 @@ enum class BookcaseFilter(val labelRes: Int) {
     NOT_STARTED(R.string.bookcase_filter_not_started),
 }
 
+enum class BookcaseSourceFilter(val labelRes: Int) {
+    ALL(R.string.bookcase_source_all),
+    LOCAL(R.string.bookcase_source_local),
+    ACCOUNT(R.string.bookcase_source_account),
+}
+
 enum class BookcaseViewMode(val key: String, val labelRes: Int) {
     COMPACT("compact", R.string.bookcase_view_compact),
     GRID("grid", R.string.bookcase_view_grid),
@@ -70,6 +76,8 @@ data class BookcaseEntry(
     val readCount: Int = 0,
     val resumeCid: String? = null,
     val lastReadAt: Long? = null,
+    val isLocalFavorite: Boolean = true,
+    val isAccountFavorite: Boolean = false,
 ) {
     /** 已读进度 = 已读章节数 / 总章节数（基于目录"已读"标记，非阅读位置）。 */
     val progress: Float
@@ -89,6 +97,7 @@ data class BookcaseUiState(
     val visibleEntries: List<BookcaseEntry> = emptyList(),
     val searchQuery: String = "",
     val filter: BookcaseFilter = BookcaseFilter.ALL,
+    val sourceFilter: BookcaseSourceFilter = BookcaseSourceFilter.ALL,
     val error: UiText? = null,
 )
 
@@ -196,29 +205,23 @@ class BookcaseViewModel(
                     }
                     return@launch
                 }
-                var newCount = 0
-                for (item in cloudItems) {
-                    if (item.aid <= 0) continue
-                    runCatching {
-                        val exists = libraryStore.contains(item.aid)
-                        if (exists) {
-                            return@runCatching
-                        }
-                        val info = runCatching {
-                            withTimeoutOrNull(3000L) { client.bookInfo(item.aid) }
-                        }.getOrNull() ?: BookInfo(id = item.aid, title = item.name)
-                        libraryStore.add(info)
-                        newCount++
-                    }
+                val existing = libraryStore.all().associateBy { it.book.id }
+                val accountBooks = cloudItems.distinctBy { it.aid }.mapNotNull { item ->
+                    if (item.aid <= 0) return@mapNotNull null
+                    val previous = existing[item.aid]
+                    previous?.book?.copy(title = item.name.ifBlank { previous.book.title }) ?: runCatching {
+                        withTimeoutOrNull(3000L) { client.bookInfo(item.aid) }
+                    }.getOrNull() ?: BookInfo(id = item.aid, title = item.name)
                 }
+                val summary = libraryStore.syncAccountFavorites(accountBooks)
                 load()
                 withContext(Dispatchers.Main) {
                     onResult(
                         true,
-                        if (newCount > 0) {
-                            "书架同步成功：云端共 ${cloudItems.size} 本，新增导入 $newCount 本"
+                        if (summary.newlyMarkedAccountFavorites > 0) {
+                            "账号收藏同步成功：云端共 ${summary.totalAccountFavorites} 本，新增书籍 ${summary.newBooks} 本；本地收藏已保留"
                         } else {
-                            "书架同步成功：云端共 ${cloudItems.size} 本，本地书架已全部收录"
+                            "账号收藏同步成功：云端共 ${summary.totalAccountFavorites} 本；本地收藏已保留"
                         }
                     )
                 }
@@ -277,6 +280,8 @@ class BookcaseViewModel(
         readCount = progress?.finishedCids?.size ?: 0,
         resumeCid = progress?.resumeCid,
         lastReadAt = progress?.lastReadAt,
+        isLocalFavorite = isLocalFavorite,
+        isAccountFavorite = isAccountFavorite,
     )
 
     fun setSortType(type: BookcaseSortType) {
@@ -306,12 +311,22 @@ class BookcaseViewModel(
         applySort()
     }
 
+    fun setSourceFilter(filter: BookcaseSourceFilter) {
+        _ui.update { it.copy(sourceFilter = filter) }
+        applySort()
+    }
+
     private fun applySort() {
         val state = _ui.value
         val sorted = sortEntries(natural, state.sortType, state.sortReversed)
         val query = state.searchQuery.trim().lowercase(Locale.ROOT)
         val visible = sorted.filter { entry ->
             val isFinished = entry.progressTotal > 0 && entry.readCount >= entry.progressTotal
+            val matchesSource = when (state.sourceFilter) {
+                BookcaseSourceFilter.ALL -> true
+                BookcaseSourceFilter.LOCAL -> entry.isLocalFavorite
+                BookcaseSourceFilter.ACCOUNT -> entry.isAccountFavorite
+            }
             val matchesFilter = when (state.filter) {
                 BookcaseFilter.ALL -> true
                 BookcaseFilter.READING -> entry.resumeCid != null && !isFinished
@@ -321,7 +336,7 @@ class BookcaseViewModel(
             val matchesQuery = query.isEmpty() ||
                 entry.title.lowercase(Locale.ROOT).contains(query) ||
                 entry.author.lowercase(Locale.ROOT).contains(query)
-            matchesFilter && matchesQuery
+            matchesSource && matchesFilter && matchesQuery
         }
         _ui.update { it.copy(entries = sorted, visibleEntries = visible) }
     }

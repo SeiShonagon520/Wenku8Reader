@@ -267,6 +267,27 @@ fun BookcasePage(
                         )
                     }
                 }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.bookcase_source_filter_label),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    BookcaseSourceFilter.entries.forEach { filter ->
+                        FilterChip(
+                            selected = ui.sourceFilter == filter,
+                            onClick = { vm.setSourceFilter(filter) },
+                            label = { Text(stringResource(filter.labelRes)) },
+                        )
+                    }
+                }
                 // 顶部工具栏：排序 + 视角切换
                 BookcaseToolbar(
                     ui = ui,
@@ -609,13 +630,18 @@ private fun BookcaseCard(
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Column {
-                    Text(
-                        entry.title,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            entry.title,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        BookcaseSourceBadge(entry)
+                    }
                     if (entry.author.isNotBlank()) {
                         Spacer(Modifier.height(3.dp))
                         Text(

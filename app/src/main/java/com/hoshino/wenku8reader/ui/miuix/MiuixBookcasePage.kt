@@ -64,6 +64,8 @@ import com.hoshino.wenku8reader.ui.bookcase.BookcaseFilter
 import com.hoshino.wenku8reader.ui.bookcase.BookcaseGridView
 import com.hoshino.wenku8reader.ui.bookcase.BookcaseShelfView
 import com.hoshino.wenku8reader.ui.bookcase.BookcaseSortType
+import com.hoshino.wenku8reader.ui.bookcase.BookcaseSourceFilter
+import com.hoshino.wenku8reader.ui.bookcase.BookcaseSourceBadge
 import com.hoshino.wenku8reader.ui.bookcase.BookcaseViewMode
 import com.hoshino.wenku8reader.ui.bookcase.BookcaseViewModel
 import com.hoshino.wenku8reader.ui.components.BookCover3D
@@ -218,6 +220,13 @@ fun MiuixBookcasePage(
                     )
                     MiuixRowDivider()
                     MiuixDropdownRow(
+                        title = stringResource(R.string.bookcase_source_filter_label),
+                        items = BookcaseSourceFilter.entries.map { stringResource(it.labelRes) },
+                        selectedIndex = BookcaseSourceFilter.entries.indexOf(ui.sourceFilter).coerceAtLeast(0),
+                        onSelected = { index -> vm.setSourceFilter(BookcaseSourceFilter.entries[index]) },
+                    )
+                    MiuixRowDivider()
+                    MiuixDropdownRow(
                         title = "视图模式",
                         icon = when (ui.viewMode) {
                             BookcaseViewMode.COMPACT -> Icons.Filled.Apps
@@ -325,13 +334,18 @@ private fun MiuixBookCard(
             )
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(
-                    text = entry.title,
-                    style = MiuixTheme.textStyles.title3,
-                    color = MiuixTheme.colorScheme.onSurfaceContainer,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = entry.title,
+                        modifier = Modifier.weight(1f),
+                        style = MiuixTheme.textStyles.title3,
+                        color = MiuixTheme.colorScheme.onSurfaceContainer,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    BookcaseSourceBadge(entry)
+                }
                 if (entry.author.isNotBlank()) {
                     Spacer(Modifier.height(3.dp))
                     Text(

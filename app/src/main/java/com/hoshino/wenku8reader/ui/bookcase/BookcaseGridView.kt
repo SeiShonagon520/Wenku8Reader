@@ -22,10 +22,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hoshino.wenku8reader.R
 import com.hoshino.wenku8reader.ui.components.BookCover3D
 import com.hoshino.wenku8reader.ui.components.bounceClick
 
@@ -81,6 +83,11 @@ private fun BookcaseCompactCard(
                 cornerRadius = 6.dp,
                 elevation = 4.dp,
                 modifier = Modifier.fillMaxSize(),
+            )
+
+            BookcaseSourceBadge(
+                entry = entry,
+                modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
             )
 
             // 阅读进度角标
@@ -170,6 +177,11 @@ private fun BookcaseGridCard(
                 modifier = Modifier.fillMaxSize(),
             )
 
+            BookcaseSourceBadge(
+                entry = entry,
+                modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
+            )
+
             // 阅读进度胶囊标签
             if (entry.progressTotal > 0) {
                 val percent = (entry.progress * 100).toInt()
@@ -212,5 +224,31 @@ private fun BookcaseGridCard(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+    }
+}
+
+@Composable
+fun BookcaseSourceBadge(
+    entry: BookcaseEntry,
+    modifier: Modifier = Modifier,
+) {
+    val label = when {
+        entry.isLocalFavorite && entry.isAccountFavorite -> R.string.bookcase_source_both
+        entry.isAccountFavorite -> R.string.bookcase_source_account
+        else -> R.string.bookcase_source_local
+    }
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(5.dp))
+            .background(Color.Black.copy(alpha = 0.72f))
+            .padding(horizontal = 5.dp, vertical = 2.dp),
+    ) {
+        Text(
+            text = stringResource(label),
+            color = Color.White,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
     }
 }

@@ -1,5 +1,6 @@
 package com.hoshino.wenku8reader.data.local.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.hoshino.wenku8reader.data.BookInfo
@@ -29,6 +30,10 @@ data class BookEntity(
     val tags: List<String>,
     val shelf: String,
     val addedAt: Long,
+    /** Whether the user explicitly saved this book to the device-only bookshelf. */
+    @ColumnInfo(defaultValue = "1") val isLocalFavorite: Boolean = true,
+    /** Whether this book has appeared in the logged-in account's remote bookshelf. */
+    @ColumnInfo(defaultValue = "0") val isAccountFavorite: Boolean = false,
 )
 
 /** 书目快照 → [BookInfo]（详情页 / 阅读器 / 目录页统一使用的领域模型）。 */

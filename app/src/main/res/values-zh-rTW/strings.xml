@@ -99,6 +99,11 @@
     <string name="bookcase_filter_reading">閱讀中</string>
     <string name="bookcase_filter_finished">已讀完</string>
     <string name="bookcase_filter_not_started">未開始</string>
+    <string name="bookcase_source_all">全部來源</string>
+    <string name="bookcase_source_filter_label">收藏來源</string>
+    <string name="bookcase_source_local">本機收藏</string>
+    <string name="bookcase_source_account">帳號收藏</string>
+    <string name="bookcase_source_both">本機 + 帳號</string>
     <string name="bookcase_no_matches">找不到符合條件的書</string>
     <string name="bookcase_sort_reverse">倒序</string>
     <string name="bookcase_view_mode">檢視模式</string>
@@ -234,7 +239,7 @@
     <string name="settings_account_logout_confirm_title">登出目前帳號</string>
     <string name="settings_account_logout_confirm_msg">登出後將自動切換回內建共享帳號，本機書架與閱讀進度不受影響。</string>
     <string name="settings_account_current">目前帳號：%1$s</string>
-    <string name="settings_account_sync_bookshelf_tip">雲端書架同步為單向讀取，將網頁端收藏的小說批次同步至本機書架。</string>
+    <string name="settings_account_sync_bookshelf_tip">雲端書架僅供讀取同步。帳號收藏與本機收藏分別標記；同一本書可以同時屬於兩類，取消本機收藏不會影響帳號收藏。</string>
     <string name="settings_account_login_and_sync">登入並同步</string>
     <string name="settings_account_sync_now">立即同步</string>
     <string name="settings_account_switch">切換帳號</string>

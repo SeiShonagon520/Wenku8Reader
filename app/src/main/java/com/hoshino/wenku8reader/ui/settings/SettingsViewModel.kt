@@ -316,29 +316,22 @@ class SettingsViewModel(
                     }
                     return@launch
                 }
-                var newCount = 0
-                for (item in cloudItems) {
-                    if (item.aid <= 0) continue
-                    runCatching {
-                        val exists = libraryStore.contains(item.aid)
-                        if (exists) {
-                            // 本地已存在该书，跳过网络详情拉取，避免触发文库8限流
-                            return@runCatching
-                        }
-                        val info = runCatching {
-                            withTimeoutOrNull(3000L) { client.bookInfo(item.aid) }
-                        }.getOrNull() ?: BookInfo(id = item.aid, title = item.name)
-                        libraryStore.add(info)
-                        newCount++
-                    }
+                val existing = libraryStore.all().associateBy { it.book.id }
+                val accountBooks = cloudItems.distinctBy { it.aid }.mapNotNull { item ->
+                    if (item.aid <= 0) return@mapNotNull null
+                    val previous = existing[item.aid]
+                    previous?.book?.copy(title = item.name.ifBlank { previous.book.title }) ?: runCatching {
+                        withTimeoutOrNull(3000L) { client.bookInfo(item.aid) }
+                    }.getOrNull() ?: BookInfo(id = item.aid, title = item.name)
                 }
+                val summary = libraryStore.syncAccountFavorites(accountBooks)
                 withContext(Dispatchers.Main) {
                     onResult(
                         true,
-                        if (newCount > 0) {
-                            "书架同步成功：云端共 ${cloudItems.size} 本，新增导入 $newCount 本"
+                        if (summary.newlyMarkedAccountFavorites > 0) {
+                            "账号收藏同步成功：云端共 ${summary.totalAccountFavorites} 本，新增书籍 ${summary.newBooks} 本；本地收藏已保留"
                         } else {
-                            "书架同步成功：云端共 ${cloudItems.size} 本，本地书架已全部收录"
+                            "账号收藏同步成功：云端共 ${summary.totalAccountFavorites} 本；本地收藏已保留"
                         }
                     )
                 }

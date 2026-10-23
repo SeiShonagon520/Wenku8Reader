@@ -112,7 +112,7 @@ class DetailViewModel(
             // 按钮状态由 `observeLocalState` 的 Flow 驱动，这里只负责写库 + 提示，
             // 不再手工改 state（手改与 Flow 的推送会互相打架）。
             if (removing) {
-                libraryStore.remove(bookId)
+                libraryStore.removeLocalFavorite(bookId)
                 _favoriteMessages.tryEmit(UiText.StringResource(R.string.detail_fav_local_removed))
             } else {
                 libraryStore.add(book)

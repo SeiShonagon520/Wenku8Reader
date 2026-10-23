@@ -118,6 +118,11 @@ private fun ShelfBookItem(
                 elevation = 8.dp,
             )
 
+            BookcaseSourceBadge(
+                entry = entry,
+                modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
+            )
+
             // 书脊底部接触阴影修饰
             Box(
                 modifier = Modifier

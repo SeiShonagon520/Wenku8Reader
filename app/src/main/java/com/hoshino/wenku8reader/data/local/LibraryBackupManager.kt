@@ -84,6 +84,8 @@ class LibraryBackupManager internal constructor(
         .put("tags", JSONArray(tags))
         .put("shelf", shelf)
         .put("addedAt", addedAt)
+        .put("isLocalFavorite", isLocalFavorite)
+        .put("isAccountFavorite", isAccountFavorite)
 
     private fun ReadingProgressEntity.toJson() = JSONObject()
         .put("bookId", bookId)
@@ -116,6 +118,9 @@ class LibraryBackupManager internal constructor(
                 tags = item.optJSONArray("tags")?.toStringList().orEmpty(),
                 shelf = item.optString("shelf", "默认").ifBlank { "默认" },
                 addedAt = item.optLong("addedAt", 0L).coerceAtLeast(0L),
+                // Older backup files predate source tracking; preserve their entries as local.
+                isLocalFavorite = item.optBoolean("isLocalFavorite", true),
+                isAccountFavorite = item.optBoolean("isAccountFavorite", false),
             )
         }
     }

@@ -44,6 +44,46 @@ interface LibraryDao {
     @Upsert
     suspend fun upsertBooks(books: List<BookEntity>)
 
+    /** Add a local favorite while preserving an existing account-favorite marker and shelf time. */
+    @Transaction
+    suspend fun addLocalFavorite(incoming: BookEntity) {
+        val existing = book(incoming.id)
+        upsertBook(
+            incoming.copy(
+                shelf = existing?.shelf ?: incoming.shelf,
+                addedAt = existing?.addedAt ?: incoming.addedAt,
+                isLocalFavorite = true,
+                isAccountFavorite = existing?.isAccountFavorite ?: false,
+            ),
+        )
+    }
+
+    /** Remove only local membership; preserve the row when it is still an account favorite. */
+    @Transaction
+    suspend fun removeLocalFavorite(bookId: Int) {
+        val existing = book(bookId) ?: return
+        if (existing.isAccountFavorite) {
+            upsertBook(existing.copy(isLocalFavorite = false))
+        } else {
+            deleteBook(bookId)
+        }
+    }
+
+    /** Merge fetched account memberships atomically so a concurrent local toggle cannot be lost. */
+    @Transaction
+    suspend fun mergeAccountFavorites(incoming: List<BookEntity>) {
+        val merged = incoming.map { accountBook ->
+            val existing = book(accountBook.id)
+            accountBook.copy(
+                shelf = existing?.shelf ?: accountBook.shelf,
+                addedAt = existing?.addedAt ?: accountBook.addedAt,
+                isLocalFavorite = existing?.isLocalFavorite ?: false,
+                isAccountFavorite = true,
+            )
+        }
+        upsertBooks(merged)
+    }
+
     @Query("DELETE FROM books WHERE id = :bookId")
     suspend fun deleteBook(bookId: Int)
 
@@ -88,7 +128,11 @@ interface LibraryDao {
     ) {
         val mergedBooks = books.map { incoming ->
             val existing = book(incoming.id)
-            if (existing == null) incoming else incoming.copy(addedAt = existing.addedAt)
+            if (existing == null) incoming else incoming.copy(
+                addedAt = existing.addedAt,
+                isLocalFavorite = incoming.isLocalFavorite || existing.isLocalFavorite,
+                isAccountFavorite = incoming.isAccountFavorite || existing.isAccountFavorite,
+            )
         }
         val mergedProgress = progressRows.map { incoming ->
             mergeProgress(progress(incoming.bookId), incoming)
