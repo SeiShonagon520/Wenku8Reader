@@ -2,6 +2,7 @@ package com.hoshino.wenku8reader.data.local.db
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import androidx.room.ColumnInfo
 
 /**
  * 单本书的阅读进度 / 已读标记。
@@ -30,4 +31,6 @@ data class ReadingProgressEntity(
     val totalChapters: Int,
     /** 已标记「已读」的章节 cid 集合。 */
     val finishedCids: List<String>,
+    /** 当前章节内的阅读位置比例（0..1），用于退出后恢复页码或滚动位置。 */
+    @ColumnInfo(defaultValue = "0.0") val resumeFraction: Float = 0f,
 )

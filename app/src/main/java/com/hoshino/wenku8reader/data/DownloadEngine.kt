@@ -3,9 +3,12 @@ package com.hoshino.wenku8reader.data
 import android.content.Context
 import androidx.compose.runtime.Immutable
 import com.hoshino.wenku8reader.data.repository.Wenku8Repository
+import com.hoshino.wenku8reader.data.local.db.DownloadTaskEntity
+import com.hoshino.wenku8reader.data.local.db.LibraryDao
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,6 +43,7 @@ class DownloadEngine(
      * 使 `Wenku8Repository.downloadFullTxt` 沦为无人调用的摆设，分层收益被削弱。
      */
     private val repository: Wenku8Repository,
+    private val dao: LibraryDao,
     /** 应用级协程作用域（由 AppContainer 注入并统一管理）；省略时自建，保证可独立构造。 */
     appScope: CoroutineScope? = null,
 ) {
@@ -59,6 +63,27 @@ class DownloadEngine(
     private val _jobs = MutableStateFlow<Map<Int, DownloadJob>>(emptyMap())
     val jobs: StateFlow<Map<Int, DownloadJob>> = _jobs.asStateFlow()
 
+    init {
+        scope.launch {
+            val tasks = dao.downloadTasks()
+            val restored = tasks.associate { task -> task.bookId to task.toDownloadJob() }
+            _jobs.update { restored + it }
+            tasks
+                .filter { it.status == JobStatus.PENDING.name || it.status == JobStatus.RUNNING.name }
+                .forEach { task ->
+                    if (!active.add(task.bookId)) return@forEach
+                    val job = task.toDownloadJob().copy(
+                        status = JobStatus.PENDING,
+                        progress = 0f,
+                        error = null,
+                    )
+                    _jobs.update { it + (job.bookId to job) }
+                    dao.upsertDownloadTask(job.toEntity())
+                    scope.launch { run(job.bookId, job.bookName, job.format, job.encoding) }
+                }
+        }
+    }
+
     @Synchronized
     fun enqueue(bookId: Int, bookName: String, format: String,
                 encoding: String = "utf8"): Boolean {
@@ -66,7 +91,11 @@ class DownloadEngine(
         _jobs.update { it + (
             bookId to DownloadJob(bookId, bookName, format, encoding)
         ) }
-        scope.launch { run(bookId, bookName, format, encoding) }
+        scope.launch {
+            val job = _jobs.value[bookId] ?: return@launch
+            dao.upsertDownloadTask(job.toEntity())
+            run(bookId, bookName, format, encoding)
+        }
         return true
     }
 
@@ -75,18 +104,45 @@ class DownloadEngine(
         cancelFlags[bookId] = true
     }
 
-    private fun update(id: Int, transform: (DownloadJob) -> DownloadJob) {
+    fun retry(bookId: Int): Boolean {
+        val job = _jobs.value[bookId] ?: return false
+        if (job.status != JobStatus.FAILED && job.status != JobStatus.CANCELLED) return false
+        if (bookId in active) {
+            scope.launch {
+                while (bookId in active) delay(25L)
+                val current = _jobs.value[bookId] ?: return@launch
+                if (current.status == JobStatus.FAILED || current.status == JobStatus.CANCELLED) {
+                    enqueue(bookId, current.bookName, current.format, current.encoding)
+                }
+            }
+            return true
+        }
+        return enqueue(bookId, job.bookName, job.format, job.encoding)
+    }
+
+    @Synchronized
+    fun remove(bookId: Int): Boolean {
+        if (bookId in active) return false
+        _jobs.update { it - bookId }
+        scope.launch { dao.deleteDownloadTask(bookId) }
+        return true
+    }
+
+    private suspend fun update(id: Int, transform: (DownloadJob) -> DownloadJob) {
+        var updated: DownloadJob? = null
         _jobs.update updateBlock@{ jobs ->
             val cur = jobs[id] ?: return@updateBlock jobs
-            jobs + (id to transform(cur))
+            transform(cur).also { updated = it }.let { jobs + (id to it) }
         }
+        updated?.let { dao.upsertDownloadTask(it.toEntity()) }
     }
 
     // ------------------------------------------------------------------ //
     private suspend fun run(bookId: Int, bookName: String, format: String,
                             encoding: String) {
-        update(bookId) { it.copy(status = JobStatus.RUNNING, progress = 0f) }
         try {
+            update(bookId) { it.copy(status = JobStatus.RUNNING, progress = 0f) }
+            checkCancelled(bookId)
             val info = repository.bookInfo(bookId).getOrThrow()
             // gid 统一走 groupIdOf（缺字段时回退 id/1000）；原先这里写死 `?: 1`，
             // 与 Reader/Toc 的推导方式不一致，取不到 gid 时会请求到错误目录。
@@ -143,7 +199,7 @@ class DownloadEngine(
         info: BookInfo,
         gid: Int,
         encoding: String,
-        onProgress: (Float) -> Unit,
+        onProgress: suspend (Float) -> Unit,
     ): ByteArray {
         val dlType = when (encoding) {
             "big5" -> "big5"
@@ -167,7 +223,7 @@ class DownloadEngine(
     private suspend fun downloadEpub(
         info: BookInfo,
         gid: Int,
-        onProgress: (Float) -> Unit,
+        onProgress: suspend (Float) -> Unit,
     ): List<ChapterContent> {
         var chapters: List<ChapterContent>? = null
         val raw = repository.downloadFullTxt(info.id, "utf8").getOrNull()
@@ -192,7 +248,7 @@ class DownloadEngine(
     private suspend fun fetchAllChapters(
         info: BookInfo,
         gid: Int,
-        onProgress: (Float) -> Unit,
+        onProgress: suspend (Float) -> Unit,
     ): List<ChapterContent> {
         val vols = repository.chapters(info.id, gid).getOrThrow()
         val total = vols.sumOf { it.chapters.size }.coerceAtLeast(1)
@@ -225,3 +281,25 @@ class DownloadEngine(
         else -> Charsets.UTF_8
     }
 }
+
+private fun DownloadTaskEntity.toDownloadJob(): DownloadJob = DownloadJob(
+    bookId = bookId,
+    bookName = bookName,
+    format = format,
+    encoding = encoding,
+    progress = progress.coerceIn(0f, 1f),
+    status = runCatching { JobStatus.valueOf(status) }.getOrDefault(JobStatus.FAILED),
+    filePath = filePath,
+    error = error,
+)
+
+private fun DownloadJob.toEntity(): DownloadTaskEntity = DownloadTaskEntity(
+    bookId = bookId,
+    bookName = bookName,
+    format = format,
+    encoding = encoding,
+    progress = progress.coerceIn(0f, 1f),
+    status = status.name,
+    filePath = filePath,
+    error = error,
+)

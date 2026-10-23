@@ -26,6 +26,7 @@ import java.util.Locale
 enum class BookcaseSortType(val key: String, val labelRes: Int) {
     DEFAULT("default", R.string.bookcase_sort_default),
     LATEST("latest", R.string.bookcase_sort_latest),
+    LAST_READ("last_read", R.string.bookcase_sort_last_read),
     NAME("name", R.string.bookcase_sort_name),
     WORD_COUNT("word_count", R.string.bookcase_sort_word_count);
 
@@ -33,6 +34,13 @@ enum class BookcaseSortType(val key: String, val labelRes: Int) {
         fun map(key: String): BookcaseSortType =
             entries.firstOrNull { it.key == key } ?: DEFAULT
     }
+}
+
+enum class BookcaseFilter(val labelRes: Int) {
+    ALL(R.string.bookcase_filter_all),
+    READING(R.string.bookcase_filter_reading),
+    FINISHED(R.string.bookcase_filter_finished),
+    NOT_STARTED(R.string.bookcase_filter_not_started),
 }
 
 enum class BookcaseViewMode(val key: String, val labelRes: Int) {
@@ -60,6 +68,8 @@ data class BookcaseEntry(
     val progressTotal: Int = 0,
     /** 已读章节数：目录页标记"已读"的章节（finishedChapters）数量。 */
     val readCount: Int = 0,
+    val resumeCid: String? = null,
+    val lastReadAt: Long? = null,
 ) {
     /** 已读进度 = 已读章节数 / 总章节数（基于目录"已读"标记，非阅读位置）。 */
     val progress: Float
@@ -76,6 +86,9 @@ data class BookcaseUiState(
     val viewMode: BookcaseViewMode = BookcaseViewMode.GRID,
     val isLoading: Boolean = false,
     val entries: List<BookcaseEntry> = emptyList(),
+    val visibleEntries: List<BookcaseEntry> = emptyList(),
+    val searchQuery: String = "",
+    val filter: BookcaseFilter = BookcaseFilter.ALL,
     val error: UiText? = null,
 )
 
@@ -262,6 +275,8 @@ class BookcaseViewModel(
         addedAt = addedAt,
         progressTotal = progress?.totalChapters ?: 0,
         readCount = progress?.finishedCids?.size ?: 0,
+        resumeCid = progress?.resumeCid,
+        lastReadAt = progress?.lastReadAt,
     )
 
     fun setSortType(type: BookcaseSortType) {
@@ -281,10 +296,34 @@ class BookcaseViewModel(
         _ui.update { it.copy(viewMode = mode) }
     }
 
+    fun setSearchQuery(query: String) {
+        _ui.update { it.copy(searchQuery = query) }
+        applySort()
+    }
+
+    fun setFilter(filter: BookcaseFilter) {
+        _ui.update { it.copy(filter = filter) }
+        applySort()
+    }
+
     private fun applySort() {
         val state = _ui.value
         val sorted = sortEntries(natural, state.sortType, state.sortReversed)
-        _ui.update { it.copy(entries = sorted) }
+        val query = state.searchQuery.trim().lowercase(Locale.ROOT)
+        val visible = sorted.filter { entry ->
+            val isFinished = entry.progressTotal > 0 && entry.readCount >= entry.progressTotal
+            val matchesFilter = when (state.filter) {
+                BookcaseFilter.ALL -> true
+                BookcaseFilter.READING -> entry.resumeCid != null && !isFinished
+                BookcaseFilter.FINISHED -> isFinished
+                BookcaseFilter.NOT_STARTED -> entry.resumeCid == null && entry.readCount == 0
+            }
+            val matchesQuery = query.isEmpty() ||
+                entry.title.lowercase(Locale.ROOT).contains(query) ||
+                entry.author.lowercase(Locale.ROOT).contains(query)
+            matchesFilter && matchesQuery
+        }
+        _ui.update { it.copy(entries = sorted, visibleEntries = visible) }
     }
 
     private fun sortEntries(
@@ -298,6 +337,11 @@ class BookcaseViewModel(
             BookcaseSortType.LATEST ->
                 source.sortedWith(
                     compareByDescending<BookcaseEntry> { it.lastUpdate }
+                        .thenBy { it.bookId }
+                )
+            BookcaseSortType.LAST_READ ->
+                source.sortedWith(
+                    compareByDescending<BookcaseEntry> { it.lastReadAt ?: Long.MIN_VALUE }
                         .thenBy { it.bookId }
                 )
             BookcaseSortType.NAME ->

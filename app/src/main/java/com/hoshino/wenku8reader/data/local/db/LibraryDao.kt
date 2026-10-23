@@ -2,6 +2,7 @@ package com.hoshino.wenku8reader.data.local.db
 
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
@@ -68,9 +69,33 @@ interface LibraryDao {
     @Upsert
     suspend fun upsertProgress(progress: ReadingProgressEntity)
 
+    /** 原子更新章节内位置，避免与已读标记等进度字段的读改写互相覆盖。 */
+    @Query(
+        "UPDATE reading_progress SET resumeFraction = :fraction " +
+            "WHERE bookId = :bookId AND resumeCid = :cid"
+    )
+    suspend fun updateResumeFraction(bookId: Int, cid: String, fraction: Float)
+
     /** 批量写入（迁移导入用）；空列表直接返回。 */
     @Upsert
     suspend fun upsertProgressAll(items: List<ReadingProgressEntity>)
+
+    /** 导入备份时合并书架与进度；同一本书保留本机入架时间和较新的阅读位置。 */
+    @Transaction
+    suspend fun mergeBackup(
+        books: List<BookEntity>,
+        progressRows: List<ReadingProgressEntity>,
+    ) {
+        val mergedBooks = books.map { incoming ->
+            val existing = book(incoming.id)
+            if (existing == null) incoming else incoming.copy(addedAt = existing.addedAt)
+        }
+        val mergedProgress = progressRows.map { incoming ->
+            mergeProgress(progress(incoming.bookId), incoming)
+        }
+        upsertBooks(mergedBooks)
+        upsertProgressAll(mergedProgress)
+    }
 
     @Query("DELETE FROM reading_progress WHERE bookId = :bookId")
     suspend fun deleteProgress(bookId: Int)
@@ -84,4 +109,37 @@ interface LibraryDao {
      */
     @Query("DELETE FROM reading_progress WHERE bookId IN (:bookIds)")
     suspend fun deleteProgressByIds(bookIds: List<Int>)
+
+    // ---------------------------------------------------------------- //
+    // 下载任务
+    // ---------------------------------------------------------------- //
+
+    @Query("SELECT * FROM download_tasks")
+    suspend fun downloadTasks(): List<DownloadTaskEntity>
+
+    @Upsert
+    suspend fun upsertDownloadTask(task: DownloadTaskEntity)
+
+    @Query("DELETE FROM download_tasks WHERE bookId = :bookId")
+    suspend fun deleteDownloadTask(bookId: Int)
+}
+
+private fun mergeProgress(
+    existing: ReadingProgressEntity?,
+    incoming: ReadingProgressEntity,
+): ReadingProgressEntity {
+    if (existing == null) return incoming
+    val preferIncomingPosition = when {
+        existing.resumeCid == null && incoming.resumeCid != null -> true
+        incoming.resumeCid == null -> false
+        incoming.lastReadAt == null -> false
+        existing.lastReadAt == null -> true
+        else -> incoming.lastReadAt > existing.lastReadAt
+    }
+    val position = if (preferIncomingPosition) incoming else existing
+    return position.copy(
+        lastReadAt = listOfNotNull(existing.lastReadAt, incoming.lastReadAt).maxOrNull(),
+        totalChapters = maxOf(existing.totalChapters, incoming.totalChapters),
+        finishedCids = (existing.finishedCids + incoming.finishedCids).distinct(),
+    )
 }

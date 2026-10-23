@@ -8,6 +8,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -137,6 +139,27 @@ fun MiuixDownloadsPage(
                                     else -> MiuixTheme.colorScheme.onSurfaceSecondary
                                 },
                             )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            when (job.status) {
+                                JobStatus.PENDING, JobStatus.RUNNING -> TextButton(
+                                    onClick = { vm.cancel(job.bookId) },
+                                ) { androidx.compose.material3.Text(stringResource(R.string.downloads_cancel)) }
+                                JobStatus.FAILED, JobStatus.CANCELLED -> {
+                                    TextButton(onClick = { vm.retry(job.bookId) }) {
+                                        androidx.compose.material3.Text(stringResource(R.string.downloads_retry))
+                                    }
+                                    TextButton(onClick = { vm.remove(job.bookId) }) {
+                                        androidx.compose.material3.Text(stringResource(R.string.downloads_remove))
+                                    }
+                                }
+                                JobStatus.DONE -> TextButton(onClick = { vm.remove(job.bookId) }) {
+                                    androidx.compose.material3.Text(stringResource(R.string.downloads_remove))
+                                }
+                            }
                         }
                     }
                 }

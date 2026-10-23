@@ -8,4 +8,8 @@ import kotlinx.coroutines.flow.StateFlow
 class DownloadsViewModel(private val downloadEngine: DownloadEngine) : ViewModel() {
 
     val jobs: StateFlow<Map<Int, DownloadJob>> = downloadEngine.jobs
+
+    fun cancel(bookId: Int) = downloadEngine.cancel(bookId)
+    fun retry(bookId: Int) = downloadEngine.retry(bookId)
+    fun remove(bookId: Int) = downloadEngine.remove(bookId)
 }

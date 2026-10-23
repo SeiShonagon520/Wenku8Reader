@@ -2,6 +2,7 @@ package com.hoshino.wenku8reader.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.Uri
 import com.hoshino.wenku8reader.data.BookInfo
 import com.hoshino.wenku8reader.data.UpdateCenter
 import com.hoshino.wenku8reader.data.Wenku8Client
@@ -9,6 +10,8 @@ import com.hoshino.wenku8reader.data.local.AppPreferences
 import com.hoshino.wenku8reader.data.local.AppStorageManager
 import com.hoshino.wenku8reader.data.local.DefaultAccount
 import com.hoshino.wenku8reader.data.local.LibraryStore
+import com.hoshino.wenku8reader.data.local.LibraryBackupManager
+import com.hoshino.wenku8reader.data.local.LibraryBackupSummary
 import com.hoshino.wenku8reader.data.local.ReaderSettings
 import com.hoshino.wenku8reader.data.local.ReaderSettingsState
 import com.hoshino.wenku8reader.data.local.ReadingProgressStore
@@ -24,6 +27,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * 清理动作的结果：ViewModel 不持有 Context，因此只回传"发生了什么 + 释放了多少字节"，
@@ -66,6 +70,7 @@ class SettingsViewModel(
     private val updateCenter: UpdateCenter,
     private val preferences: AppPreferences,
     private val libraryStore: LibraryStore,
+    private val libraryBackupManager: LibraryBackupManager,
 ) : ViewModel() {
 
     val ui: StateFlow<ReaderSettingsState> = readerSettings.flow
@@ -184,6 +189,32 @@ class SettingsViewModel(
                     affectedBooks = removed,
                 ),
             )
+        }
+    }
+
+    fun exportLibraryBackup(uri: Uri, onResult: (Result<LibraryBackupSummary>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) { libraryBackupManager.export(uri) }
+                onResult(Result.success(result))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    fun importLibraryBackup(uri: Uri, onResult: (Result<LibraryBackupSummary>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) { libraryBackupManager.import(uri) }
+                onResult(Result.success(result))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
         }
     }
 
