@@ -45,7 +45,7 @@ class UpdateChecker {
         .build()
 
     companion object {
-        private const val REPO = "TakaHoshino/Wenku8Reader"
+        private const val REPO = "SeiShonagon520/Wenku8Reader"
         private const val API_LATEST = "https://api.github.com/repos/$REPO/releases/latest"
         private const val API_LIST = "https://api.github.com/repos/$REPO/releases?per_page=20"
         private const val UA = "Wenku8Reader-Android"
