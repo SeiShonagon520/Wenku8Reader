@@ -34,6 +34,7 @@ object AppViewModelProvider {
                 application().container.updateCenter,
                 application().container.preferences,
                 application().container.libraryStore,
+                application().container.libraryBackupManager,
             )
         }
         initializer {

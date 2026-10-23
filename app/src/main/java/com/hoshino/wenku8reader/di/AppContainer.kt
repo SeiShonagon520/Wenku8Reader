@@ -9,6 +9,7 @@ import com.hoshino.wenku8reader.data.local.AppPreferences
 import com.hoshino.wenku8reader.data.local.AppStorageManager
 import com.hoshino.wenku8reader.data.local.DefaultAccount
 import com.hoshino.wenku8reader.data.local.LibraryStore
+import com.hoshino.wenku8reader.data.local.LibraryBackupManager
 import com.hoshino.wenku8reader.data.local.LocalDataMigration
 import com.hoshino.wenku8reader.data.local.ReadingProgressStore
 import com.hoshino.wenku8reader.data.local.ReaderSettings
@@ -66,9 +67,8 @@ class AppContainer(context: Context) {
         { readerSettings.flow.value.primaryMirror },
         {
             val user = preferences.customUsername
-            val pass = preferences.customPassword
-            if (!user.isNullOrBlank() && !pass.isNullOrBlank()) {
-                user to pass
+            if (!user.isNullOrBlank()) {
+                preferences.customPassword?.let { user to it }
             } else {
                 DefaultAccount.USERNAME to DefaultAccount.PASSWORD
             }
@@ -100,6 +100,9 @@ class AppContainer(context: Context) {
     val readingProgressStore: ReadingProgressStore =
         ReadingProgressStore(database.libraryDao(), localDataMigration)
 
+    val libraryBackupManager: LibraryBackupManager =
+        LibraryBackupManager(context, database.libraryDao(), localDataMigration)
+
     /** 阅读时长聚合存储（按书+日期，热力图数据源）。 */
     val readingStats: ReadingStatsStore = ReadingStatsStore(context)
 
@@ -108,7 +111,8 @@ class AppContainer(context: Context) {
     val updateCenter: UpdateCenter =
         UpdateCenter(context, updateChecker, preferences, readerSettings, applicationScope)
 
-    val downloadEngine: DownloadEngine = DownloadEngine(context, repository, applicationScope)
+    val downloadEngine: DownloadEngine =
+        DownloadEngine(context, repository, database.libraryDao(), applicationScope)
 
     init {
         /**

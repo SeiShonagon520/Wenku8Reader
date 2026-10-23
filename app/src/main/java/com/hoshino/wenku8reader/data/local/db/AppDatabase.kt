@@ -5,17 +5,18 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
  * 应用本地数据库：书架 + 阅读进度。
  *
- * `exportSchema = false`：本工程只做**同版本内的数据搬迁**（旧 JSON / 偏好 → Room），
- * 尚未有 Room 版本升级需求，导出 schema 只会多出一份无人核对的文件；
- * 将来一旦真的要写 Room 迁移，请先打开它并补上迁移测试。
+ * `exportSchema = false`：当前的迁移保持显式和小范围；如后续出现更复杂的表结构变更，
+ * 应开启 schema 导出并为迁移补齐测试。
  */
 @Database(
-    entities = [BookEntity::class, ReadingProgressEntity::class],
-    version = 1,
+    entities = [BookEntity::class, ReadingProgressEntity::class, DownloadTaskEntity::class],
+    version = 3,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -27,7 +28,35 @@ abstract class AppDatabase : RoomDatabase() {
         /** 数据库文件名。 */
         const val NAME = "wenku8.db"
 
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE reading_progress " +
+                        "ADD COLUMN resumeFraction REAL NOT NULL DEFAULT 0.0"
+                )
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS download_tasks (" +
+                        "bookId INTEGER NOT NULL, " +
+                        "bookName TEXT NOT NULL, " +
+                        "format TEXT NOT NULL, " +
+                        "encoding TEXT NOT NULL, " +
+                        "progress REAL NOT NULL, " +
+                        "status TEXT NOT NULL, " +
+                        "filePath TEXT, " +
+                        "error TEXT, " +
+                        "PRIMARY KEY(bookId))"
+                )
+            }
+        }
+
         fun build(context: Context): AppDatabase =
-            Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, NAME).build()
+            Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, NAME)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .build()
     }
 }

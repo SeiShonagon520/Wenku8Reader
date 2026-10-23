@@ -2,6 +2,7 @@ package com.hoshino.wenku8reader.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.Uri
 import com.hoshino.wenku8reader.data.BookInfo
 import com.hoshino.wenku8reader.data.UpdateCenter
 import com.hoshino.wenku8reader.data.Wenku8Client
@@ -9,6 +10,8 @@ import com.hoshino.wenku8reader.data.local.AppPreferences
 import com.hoshino.wenku8reader.data.local.AppStorageManager
 import com.hoshino.wenku8reader.data.local.DefaultAccount
 import com.hoshino.wenku8reader.data.local.LibraryStore
+import com.hoshino.wenku8reader.data.local.LibraryBackupManager
+import com.hoshino.wenku8reader.data.local.LibraryBackupSummary
 import com.hoshino.wenku8reader.data.local.ReaderSettings
 import com.hoshino.wenku8reader.data.local.ReaderSettingsState
 import com.hoshino.wenku8reader.data.local.ReadingProgressStore
@@ -24,6 +27,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * 清理动作的结果：ViewModel 不持有 Context，因此只回传"发生了什么 + 释放了多少字节"，
@@ -66,6 +70,7 @@ class SettingsViewModel(
     private val updateCenter: UpdateCenter,
     private val preferences: AppPreferences,
     private val libraryStore: LibraryStore,
+    private val libraryBackupManager: LibraryBackupManager,
 ) : ViewModel() {
 
     val ui: StateFlow<ReaderSettingsState> = readerSettings.flow
@@ -187,6 +192,32 @@ class SettingsViewModel(
         }
     }
 
+    fun exportLibraryBackup(uri: Uri, onResult: (Result<LibraryBackupSummary>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) { libraryBackupManager.export(uri) }
+                onResult(Result.success(result))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    fun importLibraryBackup(uri: Uri, onResult: (Result<LibraryBackupSummary>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) { libraryBackupManager.import(uri) }
+                onResult(Result.success(result))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
     fun setCacheMaxMb(mb: Int) {
         readerSettings.setCacheMaxMb(mb)
         // 立即按新上限裁剪（否则要等下一次写入才生效）
@@ -232,13 +263,17 @@ class SettingsViewModel(
         }
         viewModelScope.launch(Dispatchers.IO) {
             val res = client.login(trimmedUser, trimmedPass)
+            val credentialsSaved = res.success &&
+                preferences.saveCustomAccount(trimmedUser, trimmedPass)
             withContext(Dispatchers.Main) {
                 if (res.success) {
-                    preferences.customUsername = trimmedUser
-                    preferences.customPassword = trimmedPass
                     _currentUsername.value = trimmedUser
                     _isCustomAccount.value = true
-                    onResult(true, "登录成功，已绑定个人账号")
+                    onResult(
+                        true,
+                        if (credentialsSaved) "登录成功，已绑定个人账号"
+                        else "登录成功，但密码未能安全保存；会话失效后需要重新登录",
+                    )
                 } else {
                     val msg = res.message.ifBlank { "登录失败，请检查账号密码或网络连接" }
                     onResult(false, msg)

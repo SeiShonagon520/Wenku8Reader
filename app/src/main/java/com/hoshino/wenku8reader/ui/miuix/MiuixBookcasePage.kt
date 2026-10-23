@@ -60,6 +60,7 @@ import com.hoshino.wenku8reader.R
 import com.hoshino.wenku8reader.ui.AppViewModelProvider
 import com.hoshino.wenku8reader.ui.bookcase.BookcaseCompactGridView
 import com.hoshino.wenku8reader.ui.bookcase.BookcaseEntry
+import com.hoshino.wenku8reader.ui.bookcase.BookcaseFilter
 import com.hoshino.wenku8reader.ui.bookcase.BookcaseGridView
 import com.hoshino.wenku8reader.ui.bookcase.BookcaseShelfView
 import com.hoshino.wenku8reader.ui.bookcase.BookcaseSortType
@@ -187,6 +188,15 @@ fun MiuixBookcasePage(
                     .fillMaxSize()
                     .padding(inner),
             ) {
+                OutlinedTextField(
+                    value = ui.searchQuery,
+                    onValueChange = vm::setSearchQuery,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    label = { androidx.compose.material3.Text(stringResource(R.string.bookcase_search_hint)) },
+                    singleLine = true,
+                )
                 // 顶部工具栏：排序与视角切换
                 MiuixSection(
                     title = stringResource(R.string.bookcase_sort),
@@ -198,6 +208,13 @@ fun MiuixBookcasePage(
                         items = BookcaseSortType.entries.map { stringResource(it.labelRes) },
                         selectedIndex = BookcaseSortType.entries.indexOf(ui.sortType).coerceAtLeast(0),
                         onSelected = { index -> vm.setSortType(BookcaseSortType.entries[index]) },
+                    )
+                    MiuixRowDivider()
+                    MiuixDropdownRow(
+                        title = stringResource(R.string.bookcase_filter_label),
+                        items = BookcaseFilter.entries.map { stringResource(it.labelRes) },
+                        selectedIndex = BookcaseFilter.entries.indexOf(ui.filter).coerceAtLeast(0),
+                        onSelected = { index -> vm.setFilter(BookcaseFilter.entries[index]) },
                     )
                     MiuixRowDivider()
                     MiuixDropdownRow(
@@ -224,40 +241,50 @@ fun MiuixBookcasePage(
 
                 Spacer(Modifier.height(8.dp))
 
-                AnimatedContent(
-                    targetState = ui.viewMode,
-                    transitionSpec = {
-                        fadeIn(animationSpec = tween(220)) togetherWith
-                            fadeOut(animationSpec = tween(150))
-                    },
-                    modifier = Modifier.weight(1f),
-                    label = "miuixBookcaseViewTransition",
-                ) { mode ->
-                    when (mode) {
-                        BookcaseViewMode.COMPACT -> BookcaseCompactGridView(
-                            entries = ui.entries,
-                            onOpenBook = onOpenBook,
-                        )
-                        BookcaseViewMode.GRID -> BookcaseGridView(
-                            entries = ui.entries,
-                            onOpenBook = onOpenBook,
-                        )
-                        BookcaseViewMode.SHELF -> BookcaseShelfView(
-                            entries = ui.entries,
-                            onOpenBook = onOpenBook,
-                        )
-                        BookcaseViewMode.LIST -> LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(
-                                start = 16.dp,
-                                end = 16.dp,
-                                top = 4.dp,
-                                bottom = 24.dp + LocalFloatingBarInset.current,
-                            ),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            items(ui.entries, key = { it.bookId }) { entry ->
-                                MiuixBookCard(entry = entry, onOpenBook = onOpenBook)
+                if (ui.visibleEntries.isEmpty()) {
+                    MiuixEmptyState(
+                        title = stringResource(R.string.bookcase_no_matches),
+                        icon = Icons.AutoMirrored.Filled.MenuBook,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                    )
+                } else {
+                    AnimatedContent(
+                        targetState = ui.viewMode,
+                        transitionSpec = {
+                            fadeIn(animationSpec = tween(220)) togetherWith
+                                fadeOut(animationSpec = tween(150))
+                        },
+                        modifier = Modifier.weight(1f),
+                        label = "miuixBookcaseViewTransition",
+                    ) { mode ->
+                        when (mode) {
+                            BookcaseViewMode.COMPACT -> BookcaseCompactGridView(
+                                entries = ui.visibleEntries,
+                                onOpenBook = onOpenBook,
+                            )
+                            BookcaseViewMode.GRID -> BookcaseGridView(
+                                entries = ui.visibleEntries,
+                                onOpenBook = onOpenBook,
+                            )
+                            BookcaseViewMode.SHELF -> BookcaseShelfView(
+                                entries = ui.visibleEntries,
+                                onOpenBook = onOpenBook,
+                            )
+                            BookcaseViewMode.LIST -> LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    top = 4.dp,
+                                    bottom = 24.dp + LocalFloatingBarInset.current,
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                items(ui.visibleEntries, key = { it.bookId }) { entry ->
+                                    MiuixBookCard(entry = entry, onOpenBook = onOpenBook)
+                                }
                             }
                         }
                     }

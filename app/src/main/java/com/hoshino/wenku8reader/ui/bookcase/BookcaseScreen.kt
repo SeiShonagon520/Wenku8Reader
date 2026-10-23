@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.background
@@ -58,6 +60,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -125,7 +128,9 @@ fun BookcasePage(
             currentUsername = currentUsername,
             isSyncing = isSyncing,
             totalBooks = ui.entries.size,
-            readingBooks = ui.entries.count { it.readCount > 0 && it.readCount < it.progressTotal },
+            readingBooks = ui.entries.count {
+                it.resumeCid != null && !(it.progressTotal > 0 && it.readCount >= it.progressTotal)
+            },
             finishedBooks = ui.entries.count { it.progressTotal > 0 && it.readCount >= it.progressTotal },
             onDismiss = { showAccountCenterDialog = false },
             onLoginAndSync = { u, p, onFinished ->
@@ -238,6 +243,30 @@ fun BookcasePage(
                     .fillMaxSize()
                     .padding(inner),
             ) {
+                OutlinedTextField(
+                    value = ui.searchQuery,
+                    onValueChange = vm::setSearchQuery,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    label = { Text(stringResource(R.string.bookcase_search_hint)) },
+                    singleLine = true,
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    BookcaseFilter.entries.forEach { filter ->
+                        FilterChip(
+                            selected = ui.filter == filter,
+                            onClick = { vm.setFilter(filter) },
+                            label = { Text(stringResource(filter.labelRes)) },
+                        )
+                    }
+                }
                 // 顶部工具栏：排序 + 视角切换
                 BookcaseToolbar(
                     ui = ui,
@@ -252,40 +281,51 @@ fun BookcasePage(
                     ),
                 )
 
-                // 核心内容区：视角平滑淡入切换
-                AnimatedContent(
-                    targetState = ui.viewMode,
-                    transitionSpec = {
-                        fadeIn(animationSpec = tween(220)) togetherWith
-                            fadeOut(animationSpec = tween(150))
-                    },
-                    modifier = Modifier.weight(1f),
-                    label = "bookcaseViewTransition",
-                ) { mode ->
-                    when (mode) {
-                        BookcaseViewMode.COMPACT -> BookcaseCompactGridView(
-                            entries = ui.entries,
-                            onOpenBook = onOpenBook,
-                        )
-                        BookcaseViewMode.GRID -> BookcaseGridView(
-                            entries = ui.entries,
-                            onOpenBook = onOpenBook,
-                        )
-                        BookcaseViewMode.SHELF -> BookcaseShelfView(
-                            entries = ui.entries,
-                            onOpenBook = onOpenBook,
-                        )
-                        BookcaseViewMode.LIST -> LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                        ) {
-                            items(ui.entries, key = { it.bookId }) { entry ->
-                                BookcaseCard(
-                                    entry = entry,
-                                    onOpenBook = onOpenBook,
-                                    modifier = Modifier.animateItem(),
-                                )
+                if (ui.visibleEntries.isEmpty()) {
+                    ExpressiveEmptyState(
+                        title = stringResource(R.string.bookcase_no_matches),
+                        icon = Icons.AutoMirrored.Filled.MenuBook,
+                        shape = MaterialShapes.Cookie9Sided,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                    )
+                } else {
+                    // 核心内容区：视角平滑淡入切换
+                    AnimatedContent(
+                        targetState = ui.viewMode,
+                        transitionSpec = {
+                            fadeIn(animationSpec = tween(220)) togetherWith
+                                fadeOut(animationSpec = tween(150))
+                        },
+                        modifier = Modifier.weight(1f),
+                        label = "bookcaseViewTransition",
+                    ) { mode ->
+                        when (mode) {
+                            BookcaseViewMode.COMPACT -> BookcaseCompactGridView(
+                                entries = ui.visibleEntries,
+                                onOpenBook = onOpenBook,
+                            )
+                            BookcaseViewMode.GRID -> BookcaseGridView(
+                                entries = ui.visibleEntries,
+                                onOpenBook = onOpenBook,
+                            )
+                            BookcaseViewMode.SHELF -> BookcaseShelfView(
+                                entries = ui.visibleEntries,
+                                onOpenBook = onOpenBook,
+                            )
+                            BookcaseViewMode.LIST -> LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                            ) {
+                                items(ui.visibleEntries, key = { it.bookId }) { entry ->
+                                    BookcaseCard(
+                                        entry = entry,
+                                        onOpenBook = onOpenBook,
+                                        modifier = Modifier.animateItem(),
+                                    )
+                                }
+                                item { Spacer(Modifier.height(24.dp)) }
                             }
-                            item { Spacer(Modifier.height(24.dp)) }
                         }
                     }
                 }
@@ -401,6 +441,9 @@ private fun BookcaseSortBar(
             BookcaseSortType.LATEST ->
                 if (willBeReversed) "已切换为：最早更新排在前（旧到新）"
                 else "已切换为：最新更新排在前（新到旧）"
+            BookcaseSortType.LAST_READ ->
+                if (willBeReversed) "已切换为：较早阅读的书排在前"
+                else "已切换为：最近阅读的书排在前"
             BookcaseSortType.NAME ->
                 if (willBeReversed) "已切换为：书名降序（Z → A）"
                 else "已切换为：书名升序（A → Z）"
@@ -459,6 +502,7 @@ private fun BookcaseSortBar(
                             val descText = when (type) {
                                 BookcaseSortType.DEFAULT -> "加入书架的先后时间"
                                 BookcaseSortType.LATEST -> "按轻小说章节更新时间"
+                                BookcaseSortType.LAST_READ -> "按最后阅读时间排序"
                                 BookcaseSortType.NAME -> "按作品中文拼音顺序"
                                 BookcaseSortType.WORD_COUNT -> "按作品全书字数规模"
                             }
@@ -487,6 +531,8 @@ private fun BookcaseSortBar(
                 val (normalDesc, reversedDesc) = when (ui.sortType) {
                     BookcaseSortType.LATEST ->
                         stringResource(R.string.bookcase_sort_latest_desc) to stringResource(R.string.bookcase_sort_latest_asc)
+                    BookcaseSortType.LAST_READ ->
+                        stringResource(R.string.bookcase_sort_last_read_desc) to stringResource(R.string.bookcase_sort_last_read_asc)
                     BookcaseSortType.NAME ->
                         stringResource(R.string.bookcase_sort_name_asc) to stringResource(R.string.bookcase_sort_name_desc)
                     BookcaseSortType.WORD_COUNT ->

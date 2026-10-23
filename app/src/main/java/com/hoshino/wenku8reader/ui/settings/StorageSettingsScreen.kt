@@ -1,5 +1,7 @@
 package com.hoshino.wenku8reader.ui.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -146,12 +148,83 @@ private fun StorageSettingsContent(
     vm: SettingsViewModel,
     rs: ReaderSettingsState,
 ) {
+    val context = LocalContext.current
     val cacheSizes by vm.cacheSizes.collectAsStateWithLifecycle()
     val stats by vm.storageStats.collectAsStateWithLifecycle()
     var confirmClearAll by remember { mutableStateOf(false) }
     var confirmCleanupHistory by remember { mutableStateOf(false) }
+    val exportBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri != null) {
+            vm.exportLibraryBackup(uri) { result ->
+                val message = result.fold(
+                    onSuccess = {
+                        context.getString(
+                            R.string.settings_backup_export_done,
+                            it.bookCount,
+                            it.progressCount,
+                        )
+                    },
+                    onFailure = {
+                        context.getString(R.string.settings_backup_failed, it.message ?: "未知错误")
+                    },
+                )
+                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    val importBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            vm.importLibraryBackup(uri) { result ->
+                val message = result.fold(
+                    onSuccess = {
+                        context.getString(
+                            R.string.settings_backup_import_done,
+                            it.bookCount,
+                            it.progressCount,
+                        )
+                    },
+                    onFailure = {
+                        context.getString(R.string.settings_backup_failed, it.message ?: "未知错误")
+                    },
+                )
+                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
     // 上限选项：默认 30 含在其中，其余按常用档位
     val maxOptions = listOf(30, 50, 100, 200, 500)
+
+    SegmentedColumn(
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
+        title = stringResource(R.string.settings_backup_title),
+        items = listOf(
+            {
+                SegmentedListItem(
+                    headlineContent = { Text(stringResource(R.string.settings_backup_export)) },
+                    supportingContent = { Text(stringResource(R.string.settings_backup_desc)) },
+                    trailingContent = {
+                        TextButton(onClick = { exportBackup.launch("wenku8reader-backup.json") }) {
+                            Text(stringResource(R.string.settings_backup_export))
+                        }
+                    },
+                )
+            },
+            {
+                SegmentedListItem(
+                    headlineContent = { Text(stringResource(R.string.settings_backup_import)) },
+                    trailingContent = {
+                        TextButton(onClick = { importBackup.launch(arrayOf("application/json", "text/*")) }) {
+                            Text(stringResource(R.string.settings_backup_import))
+                        }
+                    },
+                )
+            },
+        ),
+    )
 
     // ---- 占用合计（与系统设置对照）----
     SegmentedColumn(

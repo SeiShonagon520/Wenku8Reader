@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -27,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -169,6 +171,27 @@ fun DownloadsScreen(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.error,
                                     )
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                when (j.status) {
+                                    JobStatus.PENDING, JobStatus.RUNNING -> TextButton(
+                                        onClick = { vm.cancel(j.bookId) },
+                                    ) { Text(stringResource(R.string.downloads_cancel)) }
+                                    JobStatus.FAILED, JobStatus.CANCELLED -> {
+                                        TextButton(onClick = { vm.retry(j.bookId) }) {
+                                            Text(stringResource(R.string.downloads_retry))
+                                        }
+                                        TextButton(onClick = { vm.remove(j.bookId) }) {
+                                            Text(stringResource(R.string.downloads_remove))
+                                        }
+                                    }
+                                    JobStatus.DONE -> TextButton(onClick = { vm.remove(j.bookId) }) {
+                                        Text(stringResource(R.string.downloads_remove))
+                                    }
                                 }
                             }
                         }

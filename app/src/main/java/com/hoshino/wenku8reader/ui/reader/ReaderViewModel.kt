@@ -33,6 +33,7 @@ data class ReaderUiState(
     val tocLoading: Boolean = false,
     val currentChapter: ChapterContent? = null,
     val currentCid: String? = null,
+    val resumeFraction: Float = 0f,
     val chapterLoading: Boolean = false,
     val error: UiText? = null,
 )
@@ -131,12 +132,17 @@ class ReaderViewModel(
                     tocLoading = false,
                 )
             }
-            val resume = progressStore.read(bookId).resumeCid
+            val progress = progressStore.read(bookId)
             val target = startCid?.let { c -> flat.firstOrNull { it.cid == c } }
-                ?: flat.firstOrNull { it.cid == resume && it.name != "插图" }
+                ?: flat.firstOrNull { it.cid == progress.resumeCid && it.name != "插图" }
                 ?: flat.firstOrNull { it.name != "插图" }
                 ?: flat.firstOrNull()
-            target?.let { loadChapter(it.cid) }
+            val resumeFraction = if (startCid == null && target?.cid == progress.resumeCid) {
+                progress.resumeFraction
+            } else {
+                0f
+            }
+            target?.let { loadChapter(it.cid, resumeFraction) }
         }
     }
 
@@ -147,7 +153,7 @@ class ReaderViewModel(
      */
     private var loadChapterJob: Job? = null
 
-    fun loadChapter(cid: String) {
+    fun loadChapter(cid: String, resumeFraction: Float = 0f) {
         val gid = _ui.value.gid ?: return
         loadChapterJob?.cancel()
         loadChapterJob = viewModelScope.launch {
@@ -177,7 +183,12 @@ class ReaderViewModel(
             }
             // 只有确认拿到有效章节后才记录进度：若请求被取消（用户已切走），
             // 不应把"进入过该章"当作已读位置落盘。
-            progressStore.savePosition(bookId, cid, totalChapters = _ui.value.flatChapters.size)
+            progressStore.savePosition(
+                bookId = bookId,
+                cid = cid,
+                totalChapters = _ui.value.flatChapters.size,
+                resumeFraction = resumeFraction,
+            )
             // 重读机制：重复阅读已完成的章节 → 立即重置为未完成，直到再次读完才恢复"已读"
             if (cid in progressStore.read(bookId).finishedCids) {
                 progressStore.resetFinished(bookId, cid)
@@ -195,10 +206,21 @@ class ReaderViewModel(
             // 繁简转换是挂起点，转换期间用户可能又切了章节
             if (!isActive) return@launch
             _ui.update {
-                it.copy(chapterLoading = false, currentCid = cid, currentChapter = display)
+                it.copy(
+                    chapterLoading = false,
+                    currentCid = cid,
+                    currentChapter = display,
+                    resumeFraction = resumeFraction.coerceIn(0f, 1f),
+                )
             }
             prefetchAdjacentChapters(cid)
         }
+    }
+
+    suspend fun saveResumeFraction(cid: String, fraction: Float) {
+        if (!fraction.isFinite()) return
+        val normalized = fraction.coerceIn(0f, 1f)
+        progressStore.saveResumeFraction(bookId, cid, normalized)
     }
 
     private var prefetchJob: Job? = null

@@ -19,6 +19,7 @@ data class ReadingProgress(
     val lastReadAt: Long? = null,
     val totalChapters: Int = 0,
     val finishedCids: Set<String> = emptySet(),
+    val resumeFraction: Float = 0f,
 ) {
     /** 是否读过（详情页「继续阅读 / 开始阅读」文案依据）。 */
     val isStarted: Boolean get() = resumeCid != null
@@ -90,9 +91,25 @@ class ReadingProgressStore internal constructor(
         bookId: Int,
         cid: String,
         totalChapters: Int,
+        resumeFraction: Float? = null,
         at: Long = System.currentTimeMillis(),
     ) {
-        edit(bookId) { it.copy(resumeCid = cid, lastReadAt = at, totalChapters = totalChapters) }
+        edit(bookId) {
+            it.copy(
+                resumeCid = cid,
+                resumeFraction = resumeFraction?.coerceIn(0f, 1f)
+                    ?: if (it.resumeCid == cid) it.resumeFraction else 0f,
+                lastReadAt = at,
+                totalChapters = totalChapters,
+            )
+        }
+    }
+
+    /** 持久化当前章节比例；仅在 cid 仍是最后阅读章节时更新，忽略已过期的 UI 回调。 */
+    suspend fun saveResumeFraction(bookId: Int, cid: String, fraction: Float) {
+        if (!fraction.isFinite()) return
+        migration.ensure()
+        dao.updateResumeFraction(bookId, cid, fraction.coerceIn(0f, 1f))
     }
 
     suspend fun updateTotalChapters(bookId: Int, total: Int) {
@@ -150,6 +167,7 @@ class ReadingProgressStore internal constructor(
             lastReadAt = null,
             totalChapters = 0,
             finishedCids = emptyList(),
+            resumeFraction = 0f,
         )
         dao.upsertProgress(transform(current))
     }
@@ -168,4 +186,5 @@ private fun ReadingProgressEntity.toProgress(): ReadingProgress = ReadingProgres
     lastReadAt = lastReadAt,
     totalChapters = totalChapters,
     finishedCids = finishedCids.toSet(),
+    resumeFraction = resumeFraction,
 )

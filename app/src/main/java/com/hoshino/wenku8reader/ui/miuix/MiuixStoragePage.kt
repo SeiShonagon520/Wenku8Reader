@@ -1,5 +1,7 @@
 package com.hoshino.wenku8reader.ui.miuix
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +21,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -59,6 +62,48 @@ fun MiuixStoragePage(
     val context = LocalContext.current
     var confirmClearAll by remember { mutableStateOf(false) }
     var confirmCleanupHistory by remember { mutableStateOf(false) }
+    val exportBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri != null) {
+            vm.exportLibraryBackup(uri) { result ->
+                val message = result.fold(
+                    onSuccess = {
+                        context.getString(
+                            R.string.settings_backup_export_done,
+                            it.bookCount,
+                            it.progressCount,
+                        )
+                    },
+                    onFailure = {
+                        context.getString(R.string.settings_backup_failed, it.message ?: "未知错误")
+                    },
+                )
+                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    val importBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            vm.importLibraryBackup(uri) { result ->
+                val message = result.fold(
+                    onSuccess = {
+                        context.getString(
+                            R.string.settings_backup_import_done,
+                            it.bookCount,
+                            it.progressCount,
+                        )
+                    },
+                    onFailure = {
+                        context.getString(R.string.settings_backup_failed, it.message ?: "未知错误")
+                    },
+                )
+                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         vm.cacheResults.collect { result ->
@@ -90,6 +135,30 @@ fun MiuixStoragePage(
                 .verticalScroll(rememberScrollState()),
         ) {
             Spacer(Modifier.height(4.dp))
+
+            MiuixSection(
+                title = stringResource(R.string.settings_backup_title),
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
+            ) {
+                MiuixRow(
+                    title = stringResource(R.string.settings_backup_export),
+                    summary = stringResource(R.string.settings_backup_desc),
+                    trailing = {
+                        TextButton(onClick = { exportBackup.launch("wenku8reader-backup.json") }) {
+                            androidx.compose.material3.Text(stringResource(R.string.settings_backup_export))
+                        }
+                    },
+                )
+                MiuixRowDivider()
+                MiuixRow(
+                    title = stringResource(R.string.settings_backup_import),
+                    trailing = {
+                        TextButton(onClick = { importBackup.launch(arrayOf("application/json", "text/*")) }) {
+                            androidx.compose.material3.Text(stringResource(R.string.settings_backup_import))
+                        }
+                    },
+                )
+            }
 
             // 占用合计（与系统设置同口径）
             MiuixSection(

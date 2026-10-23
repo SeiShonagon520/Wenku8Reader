@@ -3,6 +3,7 @@ package com.hoshino.wenku8reader.ui.reader
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -28,7 +29,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Button
@@ -85,9 +85,12 @@ import com.hoshino.wenku8reader.ui.theme.isMiuixStyle
 import java.io.File
 import java.util.Date
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
@@ -102,6 +105,7 @@ private val CONTENT_BOTTOM_INSET = 80.dp
 
 /** 阅读进度整数口径的"完成"阈值（100%）。 */
 private const val PROGRESS_COMPLETE_PERCENT = 100
+private const val RESUME_POSITION_SAVE_INTERVAL_MS = 1500L
 
 /** 插图预览目标：URL + 本章内的序号（序号用于生成保存时的文件名）。 */
 private data class ReaderPreviewTarget(val url: String, val index: Int)
@@ -180,7 +184,7 @@ fun ReaderScreen(
     val layoutDirection = LocalLayoutDirection.current
     val scope = rememberCoroutineScope()
     // 滚动模式按段落懒加载（章节正文不再是一个巨型 Text）
-    val listState = rememberLazyListState()
+    val listState = remember(ui.currentCid) { LazyListState() }
     val hazeState = remember { HazeState() }
 
     var immersive by rememberSaveable { mutableStateOf(true) }
@@ -377,10 +381,77 @@ fun ReaderScreen(
                 }
             }
             val pagerState = rememberPagerState { pagedChapters.size }
-            LaunchedEffect(chapter) {
+            var restorePositionPending by remember(ui.currentCid) {
+                mutableStateOf(ui.currentCid != null)
+            }
+            LaunchedEffect(ui.currentCid) {
                 suppressImmersiveUntil = System.currentTimeMillis() + 500
-                listState.scrollToItem(0)
-                pagerState.scrollToPage(0)
+            }
+
+            LaunchedEffect(ui.currentCid, chapter, pageMode, pagedChapters.size) {
+                if (!restorePositionPending || ui.currentCid == null || chapter == null) {
+                    return@LaunchedEffect
+                }
+                val fraction = ui.resumeFraction.coerceIn(0f, 1f)
+                if (pageMode) {
+                    if (pagedChapters.isEmpty()) return@LaunchedEffect
+                    pagerState.scrollToPage(
+                        (fraction * pagedChapters.lastIndex).roundToInt()
+                            .coerceIn(0, pagedChapters.lastIndex)
+                    )
+                } else {
+                    val itemCount = snapshotFlow { listState.layoutInfo.totalItemsCount }
+                        .first { it > 0 }
+                    val scaledPosition = fraction * (itemCount - 1)
+                    val targetIndex = scaledPosition.toInt().coerceIn(0, itemCount - 1)
+                    val withinItem = scaledPosition - targetIndex
+                    listState.scrollToItem(targetIndex)
+                    if (withinItem > 0f) {
+                        val itemSize = listState.layoutInfo.visibleItemsInfo
+                            .firstOrNull { it.index == targetIndex }?.size ?: 0
+                        if (itemSize > 0) {
+                            listState.scrollToItem(
+                                targetIndex,
+                                (withinItem * itemSize).roundToInt().coerceAtLeast(0),
+                            )
+                        }
+                    }
+                }
+                restorePositionPending = false
+            }
+
+            LaunchedEffect(ui.currentCid, pageMode, pagedChapters.size) {
+                val cid = ui.currentCid ?: return@LaunchedEffect
+                var latestFraction = ui.resumeFraction.coerceIn(0f, 1f)
+                var lastSavedAt = 0L
+                try {
+                    snapshotFlow {
+                        if (restorePositionPending) {
+                            null
+                        } else {
+                            readingFractionOf(
+                                pageMode = pageMode,
+                                currentPage = pagerState.currentPage,
+                                pageCount = pagedChapters.size,
+                                scrollFraction = listState.scrollFraction(),
+                            )
+                        }
+                    }
+                        .filterNotNull()
+                        .distinctUntilChanged()
+                        .collect { fraction ->
+                            latestFraction = fraction.coerceIn(0f, 1f)
+                            val now = SystemClock.elapsedRealtime()
+                            if (now - lastSavedAt >= RESUME_POSITION_SAVE_INTERVAL_MS) {
+                                vm.saveResumeFraction(cid, latestFraction)
+                                lastSavedAt = now
+                            }
+                        }
+                } finally {
+                    withContext(NonCancellable) {
+                        vm.saveResumeFraction(cid, latestFraction)
+                    }
+                }
             }
 
             // 模式切换不丢进度：滚动模式下持续记录进度比例（不参与组合读取，故不会引起重组），
