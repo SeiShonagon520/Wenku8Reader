@@ -16,6 +16,11 @@ import com.hoshino.wenku8reader.data.local.ReaderSettings
 import com.hoshino.wenku8reader.data.local.ReaderSettingsState
 import com.hoshino.wenku8reader.data.local.ReadingProgressStore
 import com.hoshino.wenku8reader.data.local.StorageBreakdown
+import com.hoshino.wenku8reader.data.local.webdav.WebDavBackupManager
+import com.hoshino.wenku8reader.data.local.webdav.WebDavBackupResult
+import com.hoshino.wenku8reader.data.local.webdav.WebDavBackupState
+import com.hoshino.wenku8reader.data.local.webdav.WebDavRestoreResult
+import com.hoshino.wenku8reader.data.local.webdav.WebDavSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,9 +76,11 @@ class SettingsViewModel(
     private val preferences: AppPreferences,
     private val libraryStore: LibraryStore,
     private val libraryBackupManager: LibraryBackupManager,
+    private val webDavBackupManager: WebDavBackupManager,
 ) : ViewModel() {
 
     val ui: StateFlow<ReaderSettingsState> = readerSettings.flow
+    val webDavState: StateFlow<WebDavBackupState> = webDavBackupManager.state
 
     // ---- 个人账号与云端书架 ----
     private val _currentUsername = MutableStateFlow(preferences.customUsername)
@@ -209,6 +216,95 @@ class SettingsViewModel(
         viewModelScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) { libraryBackupManager.import(uri) }
+                onResult(Result.success(result))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    fun saveAndTestWebDav(
+        serverUrl: String,
+        remoteDirectory: String,
+        username: String,
+        password: String,
+        onResult: (Result<Unit>) -> Unit,
+    ) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    webDavBackupManager.saveAndTest(serverUrl, remoteDirectory, username, password)
+                }
+                onResult(Result.success(Unit))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    fun setWebDavAutomaticBackup(enabled: Boolean, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { webDavBackupManager.setAutomaticBackupEnabled(enabled) }
+                onResult(Result.success(Unit))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    fun clearWebDavConfiguration(onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { webDavBackupManager.clearConfiguration() }
+                onResult(Result.success(Unit))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    fun backupToWebDav(onResult: (Result<WebDavBackupResult>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) { webDavBackupManager.backupNow() }
+                onResult(Result.success(result))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    fun refreshWebDavSnapshots(onResult: (Result<List<WebDavSnapshot>>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val snapshots = withContext(Dispatchers.IO) { webDavBackupManager.refreshSnapshots() }
+                onResult(Result.success(snapshots))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    fun restoreWebDavSnapshot(
+        snapshot: WebDavSnapshot,
+        onResult: (Result<WebDavRestoreResult>) -> Unit,
+    ) {
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) { webDavBackupManager.restore(snapshot) }
                 onResult(Result.success(result))
             } catch (e: CancellationException) {
                 throw e

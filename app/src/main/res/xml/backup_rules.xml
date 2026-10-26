@@ -11,6 +11,7 @@
 <full-backup-content>
     <exclude domain="sharedpref" path="account.xml" />
     <exclude domain="sharedpref" path="credentials.xml" />
+    <exclude domain="sharedpref" path="webdav_config.xml" />
     <exclude domain="sharedpref" path="cookies.xml" />
     <exclude domain="sharedpref" path="library.xml" />
 </full-backup-content>

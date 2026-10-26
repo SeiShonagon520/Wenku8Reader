@@ -41,6 +41,7 @@ import com.hoshino.wenku8reader.ui.common.CacheCategory
 import com.hoshino.wenku8reader.ui.common.formatByteSize
 import com.hoshino.wenku8reader.ui.settings.CacheActionResult
 import com.hoshino.wenku8reader.ui.settings.SettingsViewModel
+import com.hoshino.wenku8reader.ui.settings.WebDavBackupContent
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -157,6 +158,16 @@ fun MiuixStoragePage(
                             androidx.compose.material3.Text(stringResource(R.string.settings_backup_import))
                         }
                     },
+                )
+            }
+
+            MiuixSection(
+                title = stringResource(R.string.settings_webdav_title),
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
+            ) {
+                WebDavBackupContent(
+                    vm = vm,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                 )
             }
 

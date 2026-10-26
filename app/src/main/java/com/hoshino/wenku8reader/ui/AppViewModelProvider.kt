@@ -35,6 +35,7 @@ object AppViewModelProvider {
                 application().container.preferences,
                 application().container.libraryStore,
                 application().container.libraryBackupManager,
+                application().container.webDavBackupManager,
             )
         }
         initializer {

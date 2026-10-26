@@ -364,6 +364,7 @@ class LegacyMigrationTest {
 
         val bookRows = LinkedHashMap<Int, BookEntity>()
         val progressRows = LinkedHashMap<Int, ReadingProgressEntity>()
+        val downloadTaskRows = LinkedHashMap<Int, DownloadTaskEntity>()
         var dropWrites = false
         var failWrites: Throwable? = null
 
@@ -421,12 +422,30 @@ class LegacyMigrationTest {
             items.forEach { progressRows[it.bookId] = it }
         }
 
+        override suspend fun updateResumeFraction(bookId: Int, cid: String, fraction: Float) {
+            val current = progressRows[bookId]
+            if (current?.resumeCid == cid) {
+                progressRows[bookId] = current.copy(resumeFraction = fraction)
+            }
+        }
+
         override suspend fun deleteProgress(bookId: Int) {
             progressRows.remove(bookId)
         }
 
         override suspend fun deleteProgressByIds(bookIds: List<Int>) {
             bookIds.forEach { progressRows.remove(it) }
+        }
+
+        override suspend fun downloadTasks(): List<DownloadTaskEntity> = downloadTaskRows.values.toList()
+
+        override suspend fun upsertDownloadTask(task: DownloadTaskEntity) {
+            guardWrites()
+            if (!dropWrites) downloadTaskRows[task.bookId] = task
+        }
+
+        override suspend fun deleteDownloadTask(bookId: Int) {
+            downloadTaskRows.remove(bookId)
         }
     }
 

@@ -28,6 +28,7 @@ navigation = "2.8.0"
 
 room = "2.7.2"
 datastore = "1.2.1"
+work = "2.12.0"
 
 miuix = "0.9.1"
 
@@ -69,6 +70,7 @@ androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
+androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 
 # ---- MIUIX（第三方 HyperOS/MIUI 设计语言实现，作者 yukonga）----
 # miuix-blur 提供悬浮组件的液态玻璃（背景模糊 + 高光描边），SukiSU-Ultra 同款；
@@ -80,6 +82,8 @@ miuix-preference = { module = "top.yukonga.miuix.kmp:miuix-preference", version.
 # ---- 其它 ----
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+okhttp-mockwebserver = { module = "com.squareup.okhttp3:mockwebserver", version.ref = "okhttp" }
+okhttp-tls = { module = "com.squareup.okhttp3:okhttp-tls", version.ref = "okhttp" }
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
 opencc4j = { module = "com.github.houbb:opencc4j", version.ref = "opencc4j" }
 cronet-embedded = { module = "org.chromium.net:cronet-embedded", version.ref = "cronet" }

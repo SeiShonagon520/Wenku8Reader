@@ -10,12 +10,14 @@
     <cloud-backup>
         <exclude domain="sharedpref" path="account.xml" />
         <exclude domain="sharedpref" path="credentials.xml" />
+        <exclude domain="sharedpref" path="webdav_config.xml" />
         <exclude domain="sharedpref" path="cookies.xml" />
         <exclude domain="sharedpref" path="library.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="account.xml" />
         <exclude domain="sharedpref" path="credentials.xml" />
+        <exclude domain="sharedpref" path="webdav_config.xml" />
         <exclude domain="sharedpref" path="cookies.xml" />
         <exclude domain="sharedpref" path="library.xml" />
     </device-transfer>

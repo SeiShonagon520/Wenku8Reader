@@ -151,6 +151,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
+    implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.coil.compose)
     implementation(libs.opencc4j)
     implementation(libs.cronet.embedded)
@@ -173,6 +174,8 @@ dependencies {
     // 本地单元测试：Parsers / UpdateChecker.isNewer 等纯逻辑（无 Android 依赖）在此覆盖。
     // 这两处是历史上 bug 最密集、且最容易在重构中悄悄回归的区域。
     testImplementation(libs.junit)
+    testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.okhttp.tls)
     // android.jar 里的 org.json 在单元测试中只是抛 "Stub!" 的空壳，而书架迁移要解析
     // 旧 SharedPreferences 里的 JSON。引入同名的纯 Java 实现顶上：API 与 Android 端一致，
     // 且只作用于测试运行时 classpath（AGP 把 mockable android.jar 排在最后，不会遮蔽它）。

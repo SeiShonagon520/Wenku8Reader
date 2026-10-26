@@ -15,6 +15,9 @@ import com.hoshino.wenku8reader.data.local.ReadingProgressStore
 import com.hoshino.wenku8reader.data.local.ReaderSettings
 import com.hoshino.wenku8reader.data.local.ReadingStatsStore
 import com.hoshino.wenku8reader.data.local.db.AppDatabase
+import com.hoshino.wenku8reader.data.local.webdav.WebDavBackupManager
+import com.hoshino.wenku8reader.data.local.webdav.WebDavBackupScheduler
+import com.hoshino.wenku8reader.data.local.webdav.WebDavConfigStore
 import com.hoshino.wenku8reader.data.repository.Wenku8Repository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -103,6 +106,15 @@ class AppContainer(context: Context) {
     val libraryBackupManager: LibraryBackupManager =
         LibraryBackupManager(context, database.libraryDao(), localDataMigration)
 
+    private val webDavConfigStore = WebDavConfigStore(context)
+    private val webDavBackupScheduler = WebDavBackupScheduler(context)
+    val webDavBackupManager: WebDavBackupManager = WebDavBackupManager(
+        context = context,
+        backupManager = libraryBackupManager,
+        configStore = webDavConfigStore,
+        scheduler = webDavBackupScheduler,
+    )
+
     /** 阅读时长聚合存储（按书+日期，热力图数据源）。 */
     val readingStats: ReadingStatsStore = ReadingStatsStore(context)
 
@@ -115,6 +127,7 @@ class AppContainer(context: Context) {
         DownloadEngine(context, repository, database.libraryDao(), applicationScope)
 
     init {
+        webDavBackupManager.restoreSchedule()
         /**
          * 预热一次性数据搬迁：让首次打开书架/阅读器时不必等待磁盘迁移，
          * 同时把结果留在日志里（失败会带上"已导入多少条"，便于排查）。

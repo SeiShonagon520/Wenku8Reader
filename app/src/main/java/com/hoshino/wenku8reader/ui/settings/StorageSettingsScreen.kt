@@ -226,6 +226,12 @@ private fun StorageSettingsContent(
         ),
     )
 
+    SegmentedColumn(
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
+        title = stringResource(R.string.settings_webdav_title),
+        items = listOf({ WebDavBackupContent(vm = vm, modifier = Modifier.padding(16.dp)) }),
+    )
+
     // ---- 占用合计（与系统设置对照）----
     SegmentedColumn(
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
