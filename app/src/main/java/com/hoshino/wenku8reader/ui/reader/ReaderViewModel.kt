@@ -254,4 +254,120 @@ class ReaderViewModel(
             }
         }
     }
+
+    // ---------------------------------------------------------------- //
+    // 正文搜索（卷内 / 全本）
+    // ---------------------------------------------------------------- //
+
+    private val _searchState = MutableStateFlow(ReaderSearchState())
+    val searchState: StateFlow<ReaderSearchState> = _searchState.asStateFlow()
+
+    private var searchJob: Job? = null
+
+    fun setSearchQuery(query: String) {
+        _searchState.update { it.copy(query = query) }
+    }
+
+    fun setSearchScope(scope: SearchScope) {
+        _searchState.update { it.copy(scope = scope) }
+        if (_searchState.value.query.isNotBlank()) {
+            performSearch()
+        }
+    }
+
+    fun performSearch() {
+        val q = _searchState.value.query.trim()
+        if (q.isBlank()) {
+            _searchState.update { it.copy(matches = emptyList(), isSearching = false) }
+            return
+        }
+        searchJob?.cancel()
+        val scope = _searchState.value.scope
+        searchJob = viewModelScope.launch(Dispatchers.Default) {
+            _searchState.update { it.copy(isSearching = true, matches = emptyList()) }
+            if (scope == SearchScope.CURRENT_CHAPTER) {
+                val ch = _ui.value.currentChapter
+                val cid = _ui.value.currentCid.orEmpty()
+                if (ch == null || ch.text.isBlank()) {
+                    _searchState.update { it.copy(isSearching = false) }
+                    return@launch
+                }
+                val matches = findMatches(cid, ch.title, ch.text, q)
+                _searchState.update { it.copy(isSearching = false, matches = matches) }
+            } else {
+                val flat = _ui.value.flatChapters
+                val gid = _ui.value.gid ?: 0
+                val total = flat.size
+                val results = mutableListOf<SearchMatch>()
+                for ((index, chapter) in flat.withIndex()) {
+                    if (!isActive) break
+                    _searchState.update { it.copy(searchedCount = index + 1, totalToSearch = total) }
+                    val content = repository.chapterContent(gid, bookId, chapter.cid).getOrNull()
+                    if (content != null && content.text.isNotBlank()) {
+                        val m = findMatches(chapter.cid, chapter.name, content.text, q)
+                        results.addAll(m)
+                    }
+                }
+                _searchState.update { it.copy(isSearching = false, matches = results) }
+            }
+        }
+    }
+
+    private fun findMatches(cid: String, chapterTitle: String, text: String, query: String): List<SearchMatch> =
+        findSearchMatches(cid, chapterTitle, text, query)
+
+    fun clearSearch() {
+        searchJob?.cancel()
+        _searchState.value = ReaderSearchState()
+    }
 }
+
+internal fun findSearchMatches(cid: String, chapterTitle: String, text: String, query: String): List<SearchMatch> {
+    val list = mutableListOf<SearchMatch>()
+    val lowerText = text.lowercase()
+    val lowerQuery = query.lowercase()
+    var start = 0
+    val textLen = text.length
+    while (start < textLen) {
+        val idx = lowerText.indexOf(lowerQuery, start)
+        if (idx < 0) break
+        val snipStart = (idx - 25).coerceAtLeast(0)
+        val snipEnd = (idx + query.length + 25).coerceAtMost(textLen)
+        val snippet = text.substring(snipStart, snipEnd).replace("\n", " ").trim()
+        val fraction = if (textLen > 0) idx.toFloat() / textLen else 0f
+        list.add(
+            SearchMatch(
+                cid = cid,
+                chapterTitle = chapterTitle,
+                snippet = snippet,
+                matchStart = idx,
+                fraction = fraction,
+            )
+        )
+        start = idx + maxOf(1, query.length)
+        if (list.size >= 150) break
+    }
+    return list
+}
+
+enum class SearchScope {
+    CURRENT_CHAPTER,
+    FULL_BOOK,
+}
+
+data class SearchMatch(
+    val cid: String,
+    val chapterTitle: String,
+    val snippet: String,
+    val matchStart: Int,
+    val fraction: Float,
+)
+
+data class ReaderSearchState(
+    val query: String = "",
+    val scope: SearchScope = SearchScope.CURRENT_CHAPTER,
+    val isSearching: Boolean = false,
+    val matches: List<SearchMatch> = emptyList(),
+    val searchedCount: Int = 0,
+    val totalToSearch: Int = 0,
+)

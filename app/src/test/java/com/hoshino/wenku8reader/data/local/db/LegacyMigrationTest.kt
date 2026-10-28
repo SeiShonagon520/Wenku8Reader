@@ -401,6 +401,23 @@ class LegacyMigrationTest {
 
         override suspend fun bookCount(): Int = bookRows.size
 
+        override suspend fun minBookId(): Int? = bookRows.keys.minOrNull()
+
+        override suspend fun updateShelf(bookId: Int, shelf: String) {
+            bookRows[bookId]?.let { bookRows[bookId] = it.copy(shelf = shelf) }
+        }
+
+        override suspend fun updateShelfForBooks(bookIds: List<Int>, shelf: String) {
+            bookIds.forEach { updateShelf(it, shelf) }
+        }
+
+        override suspend fun renameShelf(oldShelf: String, newShelf: String) {
+            bookRows.forEach { (k, v) -> if (v.shelf == oldShelf) bookRows[k] = v.copy(shelf = newShelf) }
+        }
+
+        override suspend fun distinctShelves(): List<String> =
+            bookRows.values.map { it.shelf }.filter { it.isNotBlank() }.distinct()
+
         override suspend fun progress(bookId: Int): ReadingProgressEntity? = progressRows[bookId]
 
         override fun observeProgress(bookId: Int): Flow<ReadingProgressEntity?> =

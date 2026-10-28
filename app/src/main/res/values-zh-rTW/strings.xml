@@ -437,4 +437,15 @@
     <string name="about_intro_title">關於本應用</string>
     <string name="about_intro_body">輕小說文庫（Wenku8Reader）—— 基於 wenku8.net 的 Android 輕小說閱讀客戶端。原生 Kotlin + Jetpack Compose + Material Design 3 建置，支援沉浸式閱讀、書架收藏、離線下載（TXT/EPUB）、簡繁轉換與個人化外觀自訂。</string>
     <string name="about_disclaimer">本應用僅供個人學習與交流，網站內容版權歸原作者及 wenku8.net 所有，請支持正版。</string>
+
+    <!-- 新增特性：內文搜尋、書架自訂分組、批次管理、本機書籍匯入、應用程式內離線快取 -->
+    <string name="search">搜尋</string>
+    <string name="search_reader_title">內文搜尋</string>
+    <string name="search_current_chapter">目前章節</string>
+    <string name="search_full_book">全本搜尋</string>
+    <string name="bookcase_batch_manage">批次管理</string>
+    <string name="bookcase_import_local">匯入外部書籍</string>
+    <string name="bookcase_new_group">新增書架分組</string>
+    <string name="bookcase_move_to_group">移至分组</string>
+    <string name="detail_offline_cache">離線快取</string>
 </resources>

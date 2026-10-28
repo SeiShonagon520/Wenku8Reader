@@ -27,33 +27,47 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.TableRows
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material.icons.filled.Warning
 import android.widget.Toast
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.material3.Checkbox
@@ -118,9 +132,177 @@ fun BookcasePage(
     val currentUsername by vm.currentUsername.collectAsStateWithLifecycle()
     val isSyncing by vm.isSyncing.collectAsStateWithLifecycle()
     var showAccountCenterDialog by remember { mutableStateOf(false) }
+    var showCreateGroupDialog by remember { mutableStateOf(false) }
+    var showRenameGroupDialog by remember { mutableStateOf(false) }
+    var groupToRename by remember { mutableStateOf("") }
+    var showMoveGroupDialog by remember { mutableStateOf(false) }
+    var showConfirmDeleteDialog by remember { mutableStateOf(false) }
+    var showGroupActionDialog by remember { mutableStateOf(false) }
+    var groupToManage by remember { mutableStateOf("") }
+    var showMoreMenu by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
+    val documentPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            vm.importLocalBooks(context, uris, targetShelf = ui.selectedGroup ?: "默认") { success, msg ->
+                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     LaunchedEffect(Unit) { vm.load() }
+
+    if (showCreateGroupDialog) {
+        var groupName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showCreateGroupDialog = false },
+            title = { Text("新建书架分组") },
+            text = {
+                OutlinedTextField(
+                    value = groupName,
+                    onValueChange = { groupName = it },
+                    label = { Text("分组名称") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (groupName.isNotBlank()) {
+                            vm.createGroup(groupName)
+                            showCreateGroupDialog = false
+                        }
+                    }
+                ) { Text("创建") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateGroupDialog = false }) { Text("取消") }
+            },
+        )
+    }
+
+    if (showRenameGroupDialog) {
+        var newName by remember { mutableStateOf(groupToRename) }
+        AlertDialog(
+            onDismissRequest = { showRenameGroupDialog = false },
+            title = { Text("重命名分组") },
+            text = {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    label = { Text("新分组名称") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newName.isNotBlank()) {
+                            vm.renameGroup(groupToRename, newName)
+                            showRenameGroupDialog = false
+                        }
+                    }
+                ) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameGroupDialog = false }) { Text("取消") }
+            },
+        )
+    }
+
+    if (showGroupActionDialog) {
+        AlertDialog(
+            onDismissRequest = { showGroupActionDialog = false },
+            title = { Text("管理分组「$groupToManage」") },
+            text = { Text("请选择对该分组的操作：") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showGroupActionDialog = false
+                        groupToRename = groupToManage
+                        showRenameGroupDialog = true
+                    }
+                ) { Text("重命名") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showGroupActionDialog = false
+                        vm.deleteGroup(groupToManage)
+                        Toast.makeText(context, "已删除分组，书目已移回默认分组", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text("删除分组") }
+            },
+        )
+    }
+
+    if (showMoveGroupDialog) {
+        var selectedTarget by remember { mutableStateOf(ui.groups.firstOrNull() ?: "默认") }
+        AlertDialog(
+            onDismissRequest = { showMoveGroupDialog = false },
+            title = { Text("移至分组") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ui.groups.forEach { g ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedTarget = g }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = selectedTarget == g,
+                                onClick = { selectedTarget = g },
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(g, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showMoveGroupDialog = false
+                        vm.batchMoveSelectedToGroup(selectedTarget) { msg ->
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                ) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMoveGroupDialog = false }) { Text("取消") }
+            },
+        )
+    }
+
+    if (showConfirmDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showConfirmDeleteDialog = false },
+            title = { Text("移出书架确认") },
+            text = { Text("确定要将选中的 ${ui.selectedBookIds.size} 本书从书架中移出吗？（若是本地导入书籍，其本地文件也将被删除）") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showConfirmDeleteDialog = false
+                        vm.batchDeleteSelected { msg ->
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                ) { Text("确定移出") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmDeleteDialog = false }) { Text("取消") }
+            },
+        )
+    }
 
     if (showAccountCenterDialog) {
         BookcaseAccountCenterDialog(
@@ -169,45 +351,177 @@ fun BookcasePage(
 
     ExpressiveScaffold(
         topBar = {
-            ExpressiveTopAppBar(
-                title = stringResource(R.string.bookcase_title),
-                actions = {
-                    IconButton(onClick = onOpenStats) {
-                        Icon(Icons.Filled.CalendarMonth, contentDescription = stringResource(R.string.action_stats))
-                    }
-                    IconButton(onClick = { showAccountCenterDialog = true }) {
-                        if (isCustomAccount && !currentUsername.isNullOrBlank()) {
-                            Box(
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer)
-                                    .border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = currentUsername.orEmpty().take(1).uppercase(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+            if (ui.isBatchMode) {
+                ExpressiveTopAppBar(
+                    title = "已选择 ${ui.selectedBookIds.size} 本",
+                    navigationIcon = {
+                        IconButton(onClick = vm::exitBatchMode) {
+                            Icon(Icons.Filled.Close, contentDescription = "退出批量管理")
+                        }
+                    },
+                    actions = {
+                        TextButton(
+                            onClick = {
+                                if (ui.selectedBookIds.size == ui.visibleEntries.size) {
+                                    vm.clearSelection()
+                                } else {
+                                    vm.selectAll()
+                                }
+                            }
+                        ) {
+                            Text(if (ui.selectedBookIds.size == ui.visibleEntries.size && ui.visibleEntries.isNotEmpty()) "取消全选" else "全选")
+                        }
+                    },
+                    windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+                )
+            } else {
+                ExpressiveTopAppBar(
+                    title = stringResource(R.string.bookcase_title),
+                    actions = {
+                        IconButton(onClick = onOpenStats) {
+                            Icon(Icons.Filled.CalendarMonth, contentDescription = stringResource(R.string.action_stats))
+                        }
+                        IconButton(onClick = { showAccountCenterDialog = true }) {
+                            if (isCustomAccount && !currentUsername.isNullOrBlank()) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primaryContainer)
+                                        .border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = currentUsername.orEmpty().take(1).uppercase(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
+                                }
+                            } else {
+                                Icon(
+                                    Icons.Filled.AccountCircle,
+                                    contentDescription = stringResource(R.string.bookcase_account_title),
                                 )
                             }
-                        } else {
-                            Icon(
-                                Icons.Filled.AccountCircle,
-                                contentDescription = stringResource(R.string.bookcase_account_title),
-                            )
+                        }
+                        IconButton(onClick = { vm.load() }) {
+                            Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.action_refresh))
+                        }
+                        IconButton(onClick = onOpenDownloads) {
+                            Icon(Icons.Filled.Download, contentDescription = stringResource(R.string.action_downloads))
+                        }
+                        Box {
+                            IconButton(onClick = { showMoreMenu = true }) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = "更多")
+                            }
+                            DropdownMenu(
+                                expanded = showMoreMenu,
+                                onDismissRequest = { showMoreMenu = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("批量管理") },
+                                    leadingIcon = { Icon(Icons.Filled.Checklist, contentDescription = null) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        vm.enterBatchMode()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("导入外部书籍 (TXT/EPUB)") },
+                                    leadingIcon = { Icon(Icons.Filled.UploadFile, contentDescription = null) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        documentPickerLauncher.launch(
+                                            arrayOf(
+                                                "text/plain",
+                                                "application/epub+zip",
+                                                "application/octet-stream",
+                                                "*/*"
+                                            )
+                                        )
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("新建书架分组") },
+                                    leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        showCreateGroupDialog = true
+                                    },
+                                )
+                            }
+                        }
+                    },
+                    windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+                )
+            }
+        },
+        bottomBar = {
+            if (ui.isBatchMode) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(22.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    tonalElevation = 6.dp,
+                    shadowElevation = 8.dp,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(
+                            onClick = { showMoveGroupDialog = true },
+                            enabled = ui.selectedBookIds.isNotEmpty(),
+                        ) {
+                            Icon(Icons.Filled.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("移至分组")
+                        }
+                        TextButton(
+                            onClick = {
+                                vm.batchOfflineCacheSelected { msg ->
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            enabled = ui.selectedBookIds.isNotEmpty(),
+                        ) {
+                            Icon(Icons.Filled.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("离线缓存")
+                        }
+                        TextButton(
+                            onClick = {
+                                vm.batchMarkSelectedFinished(true) { msg ->
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            enabled = ui.selectedBookIds.isNotEmpty(),
+                        ) {
+                            Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("标为已读")
+                        }
+                        TextButton(
+                            onClick = { showConfirmDeleteDialog = true },
+                            enabled = ui.selectedBookIds.isNotEmpty(),
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                        ) {
+                            Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("移出")
                         }
                     }
-                    IconButton(onClick = { vm.load() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.action_refresh))
-                    }
-                    IconButton(onClick = onOpenDownloads) {
-                        Icon(Icons.Filled.Download, contentDescription = stringResource(R.string.action_downloads))
-                    }
-                },
-                windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
-            )
+                }
+            }
         },
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
     ) { inner ->
@@ -252,6 +566,46 @@ fun BookcasePage(
                     label = { Text(stringResource(R.string.bookcase_search_hint)) },
                     singleLine = true,
                 )
+                // 自定义书架分组胶囊栏
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FilterChip(
+                        selected = ui.selectedGroup == null,
+                        onClick = { vm.selectGroup(null) },
+                        label = { Text("全部分组") },
+                    )
+                    ui.groups.forEach { group ->
+                        FilterChip(
+                            selected = ui.selectedGroup == group,
+                            onClick = { vm.selectGroup(group) },
+                            label = { Text(group) },
+                            trailingIcon = if (group != "默认") {
+                                {
+                                    Icon(
+                                        Icons.Filled.MoreVert,
+                                        contentDescription = "管理",
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clickable {
+                                                groupToManage = group
+                                                showGroupActionDialog = true
+                                            },
+                                    )
+                                }
+                            } else null,
+                        )
+                    }
+                    AssistChip(
+                        onClick = { showCreateGroupDialog = true },
+                        label = { Text("+ 新建") },
+                    )
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -326,14 +680,26 @@ fun BookcasePage(
                             BookcaseViewMode.COMPACT -> BookcaseCompactGridView(
                                 entries = ui.visibleEntries,
                                 onOpenBook = onOpenBook,
+                                isBatchMode = ui.isBatchMode,
+                                selectedBookIds = ui.selectedBookIds,
+                                onToggleSelect = vm::toggleSelectBook,
+                                onLongClickBook = { vm.enterBatchMode(it) },
                             )
                             BookcaseViewMode.GRID -> BookcaseGridView(
                                 entries = ui.visibleEntries,
                                 onOpenBook = onOpenBook,
+                                isBatchMode = ui.isBatchMode,
+                                selectedBookIds = ui.selectedBookIds,
+                                onToggleSelect = vm::toggleSelectBook,
+                                onLongClickBook = { vm.enterBatchMode(it) },
                             )
                             BookcaseViewMode.SHELF -> BookcaseShelfView(
                                 entries = ui.visibleEntries,
                                 onOpenBook = onOpenBook,
+                                isBatchMode = ui.isBatchMode,
+                                selectedBookIds = ui.selectedBookIds,
+                                onToggleSelect = vm::toggleSelectBook,
+                                onLongClickBook = { vm.enterBatchMode(it) },
                             )
                             BookcaseViewMode.LIST -> LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
@@ -341,7 +707,13 @@ fun BookcasePage(
                                 items(ui.visibleEntries, key = { it.bookId }) { entry ->
                                     BookcaseCard(
                                         entry = entry,
-                                        onOpenBook = onOpenBook,
+                                        isBatchMode = ui.isBatchMode,
+                                        isSelected = entry.bookId in ui.selectedBookIds,
+                                        onClick = {
+                                            if (ui.isBatchMode) vm.toggleSelectBook(entry.bookId)
+                                            else onOpenBook(entry.bookId)
+                                        },
+                                        onLongClick = { vm.enterBatchMode(entry.bookId) },
                                         modifier = Modifier.animateItem(),
                                     )
                                 }
@@ -598,20 +970,24 @@ private fun BookcaseSortBar(
 @Composable
 private fun BookcaseCard(
     entry: BookcaseEntry,
-    onOpenBook: (Int) -> Unit,
+    isBatchMode: Boolean = false,
+    isSelected: Boolean = false,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     TonalCard(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
-            .bounceClick(targetScale = 0.97f, onClick = { onOpenBook(entry.bookId) }),
+            .bounceClick(targetScale = 0.97f, onLongClick = onLongClick, onClick = onClick),
     ) {
         Row(
             Modifier
                 .fillMaxWidth()
                 .height(118.dp)
                 .padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             BookCover3D(
                 url = entry.coverUrl,
@@ -686,6 +1062,13 @@ private fun BookcaseCard(
                         )
                     }
                 }
+            }
+            if (isBatchMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onClick() },
+                    modifier = Modifier.padding(start = 8.dp),
+                )
             }
         }
     }

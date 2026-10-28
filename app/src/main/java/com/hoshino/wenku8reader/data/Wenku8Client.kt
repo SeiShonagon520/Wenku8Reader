@@ -77,6 +77,7 @@ class Wenku8Client(
 ) {
 
     private val appContext = context.applicationContext
+    val context: Context get() = appContext
     private val cookieStore = CookieStore(appContext)
     private val htmlCache = HtmlDiskCache(appContext, cacheMaxMbProvider().toLong() * 1024 * 1024)
     private val okHttp = OkHttpClient.Builder()
@@ -1033,6 +1034,13 @@ class Wenku8Client(
                 }
             }
         }
+
+    fun isChapterCached(gid: Int, bookId: Int, cid: String): Boolean {
+        if (chapterCache.get<ChapterContent>("chap_${bookId}_$cid") != null) return true
+        val h = primaryMirrorProvider()
+        return htmlCache.has("$h/novel/$gid/$bookId/$cid.htm", TTL_CHAPTER, "chapter") ||
+            htmlCache.has("$DEFAULT_BASE/novel/$gid/$bookId/$cid.htm", TTL_CHAPTER, "chapter")
+    }
 
     // ------------------------------------------------------------------ //
     // 官方 App API（免 CF，参考 LightNovelReader 的 Wenku8AppDataSource）

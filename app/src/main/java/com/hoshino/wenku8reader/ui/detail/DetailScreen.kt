@@ -34,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -42,13 +43,16 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -88,6 +92,8 @@ fun DetailScreen(
     val ui by vm.ui.collectAsStateWithLifecycle()
     val jobs by vm.downloadJobs.collectAsStateWithLifecycle()
     val job = jobs[vm.bookId]
+    val cacheProgress by (vm.cacheProgress?.collectAsStateWithLifecycle() ?: remember { mutableStateOf(null) })
+    val isCaching = cacheProgress?.bookId == vm.bookId && cacheProgress?.isRunning == true
 
     val info = ui.book
     val busy = job != null &&
@@ -273,7 +279,59 @@ fun DetailScreen(
                             Text(stringResource(R.string.reviews_open))
                         }
 
-                        // 离线下载
+                        // 应用内一键批量离线缓存
+                        if (vm.bookId > 0) {
+                            TonalCard {
+                                Column(Modifier.padding(14.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            "应用内离线缓存",
+                                            style = MaterialTheme.typography.titleSmall,
+                                        )
+                                        if (isCaching) {
+                                            TextButton(onClick = vm::cancelCache) {
+                                                Text("取消")
+                                            }
+                                        }
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        "批量将小说正文及插图缓存至本地，无网环境秒开无白屏",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+
+                                    if (isCaching) {
+                                        LinearProgressIndicator(
+                                            progress = { cacheProgress?.fraction ?: 0f },
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                        Spacer(Modifier.height(6.dp))
+                                        Text(
+                                            text = cacheProgress?.message.orEmpty(),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                    } else {
+                                        FilledTonalButton(
+                                            onClick = vm::cacheAll,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            Icon(Icons.Filled.CloudDownload, contentDescription = null)
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("一键离线缓存全本 (含插图)")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 离线导出 (TXT / EPUB)
                         TonalCard {
                             Column(Modifier.padding(14.dp)) {
                                 Text(

@@ -191,6 +191,9 @@ fun ReaderScreen(
     var showSettings by remember { mutableStateOf(false) }
     var showQuickSettings by remember { mutableStateOf(false) }
     var showToc by remember { mutableStateOf(false) }
+    var showSearch by remember { mutableStateOf(false) }
+    var pendingJumpFraction by remember { mutableStateOf<Float?>(null) }
+    val searchState by vm.searchState.collectAsStateWithLifecycle()
     var autoTurn by rememberSaveable { mutableStateOf(false) }
     var suppressImmersiveUntil by remember { mutableStateOf(0L) }
     // 长按插图 → 全屏预览（记录 URL 与序号，序号用于生成保存时的文件名）
@@ -254,7 +257,12 @@ fun ReaderScreen(
                 enter = fadeIn(spring()) + slideInVertically(spring(dampingRatio = 0.8f, stiffness = 400f)) { -it },
                 exit = fadeOut(tween(150)) + slideOutVertically(tween(150)) { -it },
             ) {
-                ReaderTopBar(title = ui.title, onBack = onBack, hazeState = hazeState)
+                ReaderTopBar(
+                    title = ui.title,
+                    onBack = onBack,
+                    onSearch = { showSearch = true },
+                    hazeState = hazeState,
+                )
             }
         },
         bottomBar = {
@@ -418,6 +426,26 @@ fun ReaderScreen(
                     }
                 }
                 restorePositionPending = false
+            }
+
+            LaunchedEffect(pendingJumpFraction, pagedChapters.size) {
+                val jump = pendingJumpFraction ?: return@LaunchedEffect
+                val fraction = jump.coerceIn(0f, 1f)
+                if (pageMode) {
+                    if (pagedChapters.isNotEmpty()) {
+                        val targetPage = (fraction * pagedChapters.lastIndex).roundToInt()
+                            .coerceIn(0, pagedChapters.lastIndex)
+                        pagerState.scrollToPage(targetPage)
+                        pendingJumpFraction = null
+                    }
+                } else {
+                    val itemCount = listState.layoutInfo.totalItemsCount.takeIf { it > 0 } ?: paragraphs.size
+                    if (itemCount > 0) {
+                        val targetIndex = (fraction * (itemCount - 1)).roundToInt().coerceIn(0, itemCount - 1)
+                        listState.scrollToItem(targetIndex)
+                        pendingJumpFraction = null
+                    }
+                }
             }
 
             LaunchedEffect(ui.currentCid, pageMode, pagedChapters.size) {
@@ -817,6 +845,27 @@ fun ReaderScreen(
         } else {
             ChapterSelectionSheet(ui, vm) { showToc = false }
         }
+    }
+    if (showSearch) {
+        ReaderSearchSheet(
+            state = searchState,
+            onQueryChange = vm::setSearchQuery,
+            onScopeChange = vm::setSearchScope,
+            onSearch = vm::performSearch,
+            onClear = vm::clearSearch,
+            onSelectMatch = { match ->
+                showSearch = false
+                if (match.cid == ui.currentCid) {
+                    pendingJumpFraction = match.fraction
+                } else {
+                    vm.loadChapter(match.cid, resumeFraction = match.fraction)
+                }
+            },
+            onDismiss = {
+                showSearch = false
+                vm.clearSearch()
+            },
+        )
     }
 }
 

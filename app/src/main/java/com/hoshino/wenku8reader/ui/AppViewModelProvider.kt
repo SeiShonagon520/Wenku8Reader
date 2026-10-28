@@ -48,6 +48,8 @@ object AppViewModelProvider {
                 application().container.preferences,
                 application().container.client,
                 application().container.accountSession,
+                application().container.repository,
+                application().container.offlineCacheManager,
             )
         }
         initializer {
@@ -57,6 +59,7 @@ object AppViewModelProvider {
                 application().container.downloadEngine,
                 application().container.libraryStore,
                 application().container.readingProgressStore,
+                application().container.offlineCacheManager,
             )
         }
         initializer {

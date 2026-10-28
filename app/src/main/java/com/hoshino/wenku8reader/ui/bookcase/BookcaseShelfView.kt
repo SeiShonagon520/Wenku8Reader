@@ -12,10 +12,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,6 +46,10 @@ import com.hoshino.wenku8reader.ui.components.bounceClick
 fun BookcaseShelfView(
     entries: List<BookcaseEntry>,
     onOpenBook: (Int) -> Unit,
+    isBatchMode: Boolean = false,
+    selectedBookIds: Set<Int> = emptySet(),
+    onToggleSelect: (Int) -> Unit = {},
+    onLongClickBook: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(top = 12.dp, bottom = 24.dp),
 ) {
@@ -57,6 +66,10 @@ fun BookcaseShelfView(
             ShelfRow(
                 books = rowBooks,
                 onOpenBook = onOpenBook,
+                isBatchMode = isBatchMode,
+                selectedBookIds = selectedBookIds,
+                onToggleSelect = onToggleSelect,
+                onLongClickBook = onLongClickBook,
                 isDark = isDark,
             )
         }
@@ -67,6 +80,10 @@ fun BookcaseShelfView(
 private fun ShelfRow(
     books: List<BookcaseEntry>,
     onOpenBook: (Int) -> Unit,
+    isBatchMode: Boolean,
+    selectedBookIds: Set<Int>,
+    onToggleSelect: (Int) -> Unit,
+    onLongClickBook: (Int) -> Unit,
     isDark: Boolean,
 ) {
     Column(
@@ -83,7 +100,13 @@ private fun ShelfRow(
             books.forEach { book ->
                 ShelfBookItem(
                     entry = book,
-                    onClick = { onOpenBook(book.bookId) },
+                    isBatchMode = isBatchMode,
+                    isSelected = book.bookId in selectedBookIds,
+                    onClick = {
+                        if (isBatchMode) onToggleSelect(book.bookId)
+                        else onOpenBook(book.bookId)
+                    },
+                    onLongClick = { onLongClickBook(book.bookId) },
                 )
             }
             // 补齐空白占位，保证前排对齐
@@ -100,12 +123,15 @@ private fun ShelfRow(
 @Composable
 private fun ShelfBookItem(
     entry: BookcaseEntry,
+    isBatchMode: Boolean,
+    isSelected: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .width(96.dp)
-            .bounceClick(targetScale = 0.93f, onClick = onClick),
+            .bounceClick(targetScale = 0.93f, onLongClick = onLongClick, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box {
@@ -117,6 +143,30 @@ private fun ShelfBookItem(
                 cornerRadius = 6.dp,
                 elevation = 8.dp,
             )
+
+            if (isBatchMode) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isSelected) MaterialTheme.colorScheme.primary
+                            else Color.Black.copy(alpha = 0.5f)
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (isSelected) {
+                        Icon(
+                            Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(15.dp),
+                        )
+                    }
+                }
+            }
 
             BookcaseSourceBadge(
                 entry = entry,

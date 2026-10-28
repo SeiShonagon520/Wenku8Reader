@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.BatteryStd
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -78,6 +79,7 @@ private const val BATTERY_FALLBACK_PERCENT = 100
 internal fun ReaderTopBar(
     title: String,
     onBack: () -> Unit,
+    onSearch: () -> Unit = {},
     hazeState: HazeState? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -129,6 +131,13 @@ internal fun ReaderTopBar(
                         .weight(1f)
                         .padding(horizontal = 8.dp),
                 )
+                IconButton(onClick = onSearch) {
+                    Icon(
+                        Icons.Filled.Search,
+                        contentDescription = stringResource(R.string.search),
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
             }
         }
     }

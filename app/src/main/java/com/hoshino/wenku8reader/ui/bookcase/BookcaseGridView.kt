@@ -11,10 +11,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,6 +45,10 @@ import com.hoshino.wenku8reader.ui.components.bounceClick
 fun BookcaseCompactGridView(
     entries: List<BookcaseEntry>,
     onOpenBook: (Int) -> Unit,
+    isBatchMode: Boolean = false,
+    selectedBookIds: Set<Int> = emptySet(),
+    onToggleSelect: (Int) -> Unit = {},
+    onLongClickBook: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
 ) {
@@ -53,7 +62,13 @@ fun BookcaseCompactGridView(
         items(entries, key = { it.bookId }) { entry ->
             BookcaseCompactCard(
                 entry = entry,
-                onClick = { onOpenBook(entry.bookId) },
+                isBatchMode = isBatchMode,
+                isSelected = entry.bookId in selectedBookIds,
+                onClick = {
+                    if (isBatchMode) onToggleSelect(entry.bookId)
+                    else onOpenBook(entry.bookId)
+                },
+                onLongClick = { onLongClickBook(entry.bookId) },
             )
         }
     }
@@ -62,13 +77,16 @@ fun BookcaseCompactGridView(
 @Composable
 private fun BookcaseCompactCard(
     entry: BookcaseEntry,
+    isBatchMode: Boolean,
+    isSelected: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .bounceClick(targetScale = 0.95f, onClick = onClick),
+            .bounceClick(targetScale = 0.95f, onLongClick = onLongClick, onClick = onClick),
     ) {
         Box(
             modifier = Modifier
@@ -89,6 +107,31 @@ private fun BookcaseCompactCard(
                 entry = entry,
                 modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
             )
+
+            // 批量勾选指示图标
+            if (isBatchMode) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(20.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isSelected) MaterialTheme.colorScheme.primary
+                            else Color.Black.copy(alpha = 0.5f)
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (isSelected) {
+                        Icon(
+                            Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                }
+            }
 
             // 阅读进度角标
             if (entry.progressTotal > 0) {
@@ -132,6 +175,10 @@ private fun BookcaseCompactCard(
 fun BookcaseGridView(
     entries: List<BookcaseEntry>,
     onOpenBook: (Int) -> Unit,
+    isBatchMode: Boolean = false,
+    selectedBookIds: Set<Int> = emptySet(),
+    onToggleSelect: (Int) -> Unit = {},
+    onLongClickBook: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(16.dp),
 ) {
@@ -145,7 +192,13 @@ fun BookcaseGridView(
         items(entries, key = { it.bookId }) { entry ->
             BookcaseGridCard(
                 entry = entry,
-                onClick = { onOpenBook(entry.bookId) },
+                isBatchMode = isBatchMode,
+                isSelected = entry.bookId in selectedBookIds,
+                onClick = {
+                    if (isBatchMode) onToggleSelect(entry.bookId)
+                    else onOpenBook(entry.bookId)
+                },
+                onLongClick = { onLongClickBook(entry.bookId) },
             )
         }
     }
@@ -154,13 +207,16 @@ fun BookcaseGridView(
 @Composable
 private fun BookcaseGridCard(
     entry: BookcaseEntry,
+    isBatchMode: Boolean,
+    isSelected: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .bounceClick(targetScale = 0.94f, onClick = onClick),
+            .bounceClick(targetScale = 0.94f, onLongClick = onLongClick, onClick = onClick),
     ) {
         Box(
             modifier = Modifier
@@ -181,6 +237,31 @@ private fun BookcaseGridCard(
                 entry = entry,
                 modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
             )
+
+            // 批量勾选指示图标
+            if (isBatchMode) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isSelected) MaterialTheme.colorScheme.primary
+                            else Color.Black.copy(alpha = 0.5f)
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (isSelected) {
+                        Icon(
+                            Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
+            }
 
             // 阅读进度胶囊标签
             if (entry.progressTotal > 0) {

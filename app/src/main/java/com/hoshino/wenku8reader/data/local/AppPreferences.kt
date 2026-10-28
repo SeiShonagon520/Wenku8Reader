@@ -47,6 +47,32 @@ class AppPreferences(context: Context) {
             ui.edit().putString("bookcase_view_mode", value).apply()
         }
 
+    // ---- 书架自定义分组 ----
+    var customShelves: Set<String>
+        get() = ui.getStringSet("custom_shelves", emptySet()) ?: emptySet()
+        set(value) {
+            ui.edit().putStringSet("custom_shelves", value).apply()
+        }
+
+    fun addCustomShelf(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isNotEmpty()) {
+            customShelves = customShelves + trimmed
+        }
+    }
+
+    fun removeCustomShelf(name: String) {
+        customShelves = customShelves - name
+    }
+
+    fun renameCustomShelf(oldName: String, newName: String) {
+        val trimmedOld = oldName.trim()
+        val trimmedNew = newName.trim()
+        if (trimmedOld.isNotEmpty() && trimmedNew.isNotEmpty()) {
+            customShelves = (customShelves - trimmedOld) + trimmedNew
+        }
+    }
+
     // ---- 更新检查 ----
     /** 用户选择「跳过该版本」的 release tag（如 v0.2.0）；启动/手动检查时不再提示。 */
     var skippedUpdateVersion: String?

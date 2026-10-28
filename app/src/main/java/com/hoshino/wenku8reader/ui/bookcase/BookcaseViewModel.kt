@@ -1,5 +1,7 @@
 package com.hoshino.wenku8reader.ui.bookcase
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hoshino.wenku8reader.R
@@ -7,10 +9,13 @@ import com.hoshino.wenku8reader.data.local.AppPreferences
 import com.hoshino.wenku8reader.data.local.AccountSession
 import com.hoshino.wenku8reader.data.local.LibraryBook
 import com.hoshino.wenku8reader.data.local.LibraryStore
+import com.hoshino.wenku8reader.data.local.LocalBookImporter
+import com.hoshino.wenku8reader.data.local.OfflineCacheManager
 import com.hoshino.wenku8reader.data.local.ReadingProgress
 import com.hoshino.wenku8reader.data.local.ReadingProgressStore
 import com.hoshino.wenku8reader.data.BookInfo
 import com.hoshino.wenku8reader.data.Wenku8Client
+import com.hoshino.wenku8reader.data.repository.Wenku8Repository
 import com.hoshino.wenku8reader.ui.common.UiText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -72,6 +77,7 @@ data class BookcaseEntry(
     val lastUpdate: String = "",
     val wordCount: Int = 0,
     val addedAt: Long = 0L,
+    val shelf: String = "默认",
     val progressTotal: Int = 0,
     /** 已读章节数：目录页标记"已读"的章节（finishedChapters）数量。 */
     val readCount: Int = 0,
@@ -99,6 +105,10 @@ data class BookcaseUiState(
     val searchQuery: String = "",
     val filter: BookcaseFilter = BookcaseFilter.ALL,
     val sourceFilter: BookcaseSourceFilter = BookcaseSourceFilter.ALL,
+    val groups: List<String> = listOf("默认"),
+    val selectedGroup: String? = null,
+    val isBatchMode: Boolean = false,
+    val selectedBookIds: Set<Int> = emptySet(),
     val error: UiText? = null,
 )
 
@@ -108,6 +118,8 @@ class BookcaseViewModel(
     private val preferences: AppPreferences,
     private val client: Wenku8Client,
     private val accountSession: AccountSession,
+    private val repository: Wenku8Repository? = null,
+    private val offlineCacheManager: OfflineCacheManager? = null,
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(
@@ -271,6 +283,7 @@ class BookcaseViewModel(
         lastUpdate = book.lastUpdate,
         wordCount = parseWordCount(book.wordCount),
         addedAt = addedAt,
+        shelf = shelf.ifBlank { "默认" },
         progressTotal = progress?.totalChapters ?: 0,
         readCount = progress?.finishedCids?.size ?: 0,
         resumeCid = progress?.resumeCid,
@@ -311,10 +324,203 @@ class BookcaseViewModel(
         applySort()
     }
 
+    // ---------------------------------------------------------------- //
+    // 分组管理
+    // ---------------------------------------------------------------- //
+
+    fun selectGroup(group: String?) {
+        _ui.update { it.copy(selectedGroup = group) }
+        applySort()
+    }
+
+    fun createGroup(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isNotBlank()) {
+            preferences.addCustomShelf(trimmed)
+            applySort()
+        }
+    }
+
+    fun renameGroup(oldName: String, newName: String) {
+        val trimmedOld = oldName.trim()
+        val trimmedNew = newName.trim()
+        if (trimmedOld.isNotBlank() && trimmedNew.isNotBlank()) {
+            preferences.renameCustomShelf(trimmedOld, trimmedNew)
+            viewModelScope.launch {
+                libraryStore.renameShelf(trimmedOld, trimmedNew)
+                if (_ui.value.selectedGroup == trimmedOld) {
+                    _ui.update { it.copy(selectedGroup = trimmedNew) }
+                }
+                load()
+            }
+        }
+    }
+
+    fun deleteGroup(name: String) {
+        preferences.removeCustomShelf(name)
+        viewModelScope.launch {
+            libraryStore.renameShelf(name, "默认")
+            if (_ui.value.selectedGroup == name) {
+                _ui.update { it.copy(selectedGroup = null) }
+            }
+            load()
+        }
+    }
+
+    // ---------------------------------------------------------------- //
+    // 批量操作模式
+    // ---------------------------------------------------------------- //
+
+    fun enterBatchMode(initialBookId: Int? = null) {
+        _ui.update {
+            it.copy(
+                isBatchMode = true,
+                selectedBookIds = if (initialBookId != null) setOf(initialBookId) else emptySet(),
+            )
+        }
+    }
+
+    fun exitBatchMode() {
+        _ui.update { it.copy(isBatchMode = false, selectedBookIds = emptySet()) }
+    }
+
+    fun toggleSelectBook(bookId: Int) {
+        _ui.update {
+            val next = if (bookId in it.selectedBookIds) {
+                it.selectedBookIds - bookId
+            } else {
+                it.selectedBookIds + bookId
+            }
+            it.copy(selectedBookIds = next)
+        }
+    }
+
+    fun selectAll() {
+        _ui.update {
+            val allIds = it.visibleEntries.map { e -> e.bookId }.toSet()
+            it.copy(selectedBookIds = allIds)
+        }
+    }
+
+    fun clearSelection() {
+        _ui.update { it.copy(selectedBookIds = emptySet()) }
+    }
+
+    fun batchDeleteSelected(onResult: (String) -> Unit) {
+        val ids = _ui.value.selectedBookIds.toList()
+        if (ids.isEmpty()) return
+        exitBatchMode()
+        viewModelScope.launch {
+            libraryStore.removeLocalFavorites(ids)
+            for (id in ids) {
+                if (id < 0) {
+                    // 本地书籍，清理磁盘数据
+                    LocalBookImporter.deleteLocalBook(client.context, id)
+                }
+            }
+            withContext(Dispatchers.Main) {
+                onResult("已移出 ${ids.size} 本书籍")
+            }
+        }
+    }
+
+    fun batchMoveSelectedToGroup(targetShelf: String, onResult: (String) -> Unit) {
+        val ids = _ui.value.selectedBookIds.toList()
+        if (ids.isEmpty()) return
+        exitBatchMode()
+        viewModelScope.launch {
+            libraryStore.updateShelfForBooks(ids, targetShelf)
+            withContext(Dispatchers.Main) {
+                onResult("已将 ${ids.size} 本书移至「$targetShelf」")
+            }
+            load()
+        }
+    }
+
+    fun batchMarkSelectedFinished(finished: Boolean, onResult: (String) -> Unit) {
+        val ids = _ui.value.selectedBookIds.toList()
+        if (ids.isEmpty()) return
+        exitBatchMode()
+        viewModelScope.launch {
+            val progressMap = progressStore.readAll()
+            for (id in ids) {
+                val p = progressMap[id]
+                if (finished && p != null && p.totalChapters > 0) {
+                    // 全部标为已读
+                    val allCids = (1..p.totalChapters).map { it.toString() }
+                    progressStore.markAllFinished(id, allCids)
+                } else if (!finished) {
+                    // 重置已读
+                    progressStore.resetAllFinished(id)
+                }
+            }
+            withContext(Dispatchers.Main) {
+                onResult(if (finished) "已将选中的 ${ids.size} 本书标为已读" else "已将选中的 ${ids.size} 本书重置为未读")
+            }
+            load()
+        }
+    }
+
+    fun batchOfflineCacheSelected(onResult: (String) -> Unit) {
+        val ids = _ui.value.selectedBookIds.toList()
+        if (ids.isEmpty()) return
+        exitBatchMode()
+        if (repository == null || offlineCacheManager == null) {
+            onResult("缓存组件未就绪")
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            var queued = 0
+            for (id in ids) {
+                if (id < 0) continue // 本地书籍已在本地
+                val bookRes = repository.bookInfo(id)
+                val info = bookRes.getOrNull() ?: continue
+                val gid = repository.groupIdOf(info)
+                val vols = repository.chapters(id, gid).getOrDefault(emptyList())
+                if (vols.isNotEmpty()) {
+                    offlineCacheManager.cacheBook(id, gid, info.title, vols)
+                    queued++
+                }
+            }
+            withContext(Dispatchers.Main) {
+                onResult("已将选中的 $queued 本书加入离线缓存队列")
+            }
+        }
+    }
+
+    fun importLocalBooks(context: Context, uris: List<Uri>, targetShelf: String = "默认", onResult: (Boolean, String) -> Unit) {
+        if (uris.isEmpty()) return
+        viewModelScope.launch {
+            _ui.update { it.copy(isLoading = true) }
+            var successCount = 0
+            var lastName = ""
+            for (uri in uris) {
+                val res = LocalBookImporter.importFile(context, uri, libraryStore, targetShelf)
+                if (res.isSuccess) {
+                    successCount++
+                    lastName = res.getOrNull()?.title.orEmpty()
+                }
+            }
+            load()
+            withContext(Dispatchers.Main) {
+                if (successCount == 1) {
+                    onResult(true, "成功导入《$lastName》")
+                } else if (successCount > 1) {
+                    onResult(true, "成功导入 $successCount 本本地轻小说")
+                } else {
+                    onResult(false, "导入失败，请检查文件格式是否为 TXT 或 EPUB")
+                }
+            }
+        }
+    }
+
     private fun applySort() {
         val state = _ui.value
         val sorted = sortEntries(natural, state.sortType, state.sortReversed)
         val query = state.searchQuery.trim().lowercase(Locale.ROOT)
+        val allGroups = (listOf("默认") + preferences.customShelves + natural.map { it.shelf })
+            .distinct()
+            .filter { it.isNotBlank() }
         val visible = sorted.filter { entry ->
             val isFinished = entry.progressTotal > 0 && entry.readCount >= entry.progressTotal
             val matchesSource = when (state.sourceFilter) {
@@ -328,12 +534,13 @@ class BookcaseViewModel(
                 BookcaseFilter.FINISHED -> isFinished
                 BookcaseFilter.NOT_STARTED -> entry.resumeCid == null && entry.readCount == 0
             }
+            val matchesGroup = state.selectedGroup == null || entry.shelf == state.selectedGroup
             val matchesQuery = query.isEmpty() ||
                 entry.title.lowercase(Locale.ROOT).contains(query) ||
                 entry.author.lowercase(Locale.ROOT).contains(query)
-            matchesSource && matchesFilter && matchesQuery
+            matchesSource && matchesFilter && matchesGroup && matchesQuery
         }
-        _ui.update { it.copy(entries = sorted, visibleEntries = visible) }
+        _ui.update { it.copy(entries = sorted, visibleEntries = visible, groups = allGroups) }
     }
 
     private fun sortEntries(

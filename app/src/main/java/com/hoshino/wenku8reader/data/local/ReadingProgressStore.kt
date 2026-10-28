@@ -126,6 +126,21 @@ class ReadingProgressStore internal constructor(
         }
     }
 
+    /** 批量标记章节为已读。 */
+    suspend fun markAllFinished(bookId: Int, cids: Collection<String>) {
+        if (cids.isEmpty()) return
+        edit(bookId) { row ->
+            row.copy(finishedCids = (row.finishedCids + cids).distinct())
+        }
+    }
+
+    /** 重置该书所有已读标记（设为空集合）。 */
+    suspend fun resetAllFinished(bookId: Int) {
+        edit(bookId) { row ->
+            if (row.finishedCids.isEmpty()) row else row.copy(finishedCids = emptyList())
+        }
+    }
+
     /** 重读重置：从完成集合移除该章节（进度回到未完成）。 */
     suspend fun resetFinished(bookId: Int, cid: String) {
         edit(bookId) { row ->

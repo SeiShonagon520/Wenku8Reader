@@ -14,6 +14,7 @@ import com.hoshino.wenku8reader.data.local.LibraryBackupManager
 import com.hoshino.wenku8reader.data.local.LocalDataMigration
 import com.hoshino.wenku8reader.data.local.ReadingProgressStore
 import com.hoshino.wenku8reader.data.local.ReaderSettings
+import com.hoshino.wenku8reader.data.local.OfflineCacheManager
 import com.hoshino.wenku8reader.data.local.ReadingStatsStore
 import com.hoshino.wenku8reader.data.local.db.AppDatabase
 import com.hoshino.wenku8reader.data.local.webdav.WebDavBackupManager
@@ -83,7 +84,10 @@ class AppContainer(context: Context) {
         { readerSettings.flow.value.cacheMaxMb },
     )
 
-    val repository: Wenku8Repository = Wenku8Repository(client)
+    val repository: Wenku8Repository = Wenku8Repository(client, context)
+
+    val offlineCacheManager: OfflineCacheManager =
+        OfflineCacheManager(context, repository, client, scope = ioScope)
 
     /**
      * 存储占用统计与清理（缓存目录 + 网页离线缓存 + SharedPreferences）。

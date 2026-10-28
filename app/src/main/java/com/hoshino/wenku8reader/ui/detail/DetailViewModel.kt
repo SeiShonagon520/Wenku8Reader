@@ -8,6 +8,7 @@ import com.hoshino.wenku8reader.data.BookInfo
 import com.hoshino.wenku8reader.data.DownloadEngine
 import com.hoshino.wenku8reader.data.DownloadJob
 import com.hoshino.wenku8reader.data.local.LibraryStore
+import com.hoshino.wenku8reader.data.local.OfflineCacheManager
 import com.hoshino.wenku8reader.data.local.ReadingProgressStore
 import com.hoshino.wenku8reader.data.repository.Wenku8Repository
 import com.hoshino.wenku8reader.ui.common.UiText
@@ -41,11 +42,13 @@ class DetailViewModel(
     val downloadEngine: DownloadEngine,
     private val libraryStore: LibraryStore,
     private val progressStore: ReadingProgressStore,
+    val offlineCacheManager: OfflineCacheManager? = null,
 ) : ViewModel() {
 
     val bookId: Int = savedStateHandle["id"] ?: 0
 
     val downloadJobs: StateFlow<Map<Int, DownloadJob>> = downloadEngine.jobs
+    val cacheProgress: StateFlow<OfflineCacheManager.CacheProgress?>? = offlineCacheManager?.progress
 
     private val _ui = MutableStateFlow(DetailUiState())
     val ui: StateFlow<DetailUiState> = _ui.asStateFlow()
@@ -100,6 +103,23 @@ class DetailViewModel(
     fun download(format: String, encoding: String = "utf8") {
         val title = _ui.value.book?.title ?: return
         downloadEngine.enqueue(bookId, title, format, encoding)
+    }
+
+    /** 一键离线缓存整本书所有分卷到应用本地 */
+    fun cacheAll() {
+        val book = _ui.value.book ?: return
+        if (offlineCacheManager == null) return
+        viewModelScope.launch {
+            val gid = repository.groupIdOf(book)
+            val vols = repository.chapters(bookId, gid).getOrDefault(emptyList())
+            if (vols.isNotEmpty()) {
+                offlineCacheManager.cacheBook(bookId, gid, book.title, vols)
+            }
+        }
+    }
+
+    fun cancelCache() {
+        offlineCacheManager?.cancel()
     }
 
     // ------------------------------------------------------------------ //

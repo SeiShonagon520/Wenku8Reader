@@ -81,6 +81,39 @@ class LibraryStore internal constructor(
         dao.removeLocalFavorite(bookId)
     }
 
+    suspend fun updateShelf(bookId: Int, shelf: String) {
+        migration.ensure()
+        dao.updateShelf(bookId, shelf)
+    }
+
+    suspend fun updateShelfForBooks(bookIds: List<Int>, shelf: String) {
+        if (bookIds.isEmpty()) return
+        migration.ensure()
+        dao.updateShelfForBooks(bookIds, shelf)
+    }
+
+    suspend fun renameShelf(oldShelf: String, newShelf: String) {
+        migration.ensure()
+        dao.renameShelf(oldShelf, newShelf)
+    }
+
+    suspend fun removeLocalFavorites(bookIds: List<Int>) {
+        if (bookIds.isEmpty()) return
+        migration.ensure()
+        dao.removeLocalFavorites(bookIds)
+    }
+
+    suspend fun nextLocalBookId(): Int {
+        migration.ensure()
+        val min = dao.minBookId() ?: 0
+        return if (min < 0) min - 1 else -1
+    }
+
+    suspend fun distinctShelves(): List<String> {
+        migration.ensure()
+        return dao.distinctShelves()
+    }
+
     /** Merge account favorites into the local library without changing local-favorite flags. */
     suspend fun syncAccountFavorites(books: List<BookInfo>): AccountFavoriteSyncSummary {
         migration.ensure()

@@ -87,6 +87,28 @@ interface LibraryDao {
     @Query("DELETE FROM books WHERE id = :bookId")
     suspend fun deleteBook(bookId: Int)
 
+    @Query("SELECT MIN(id) FROM books")
+    suspend fun minBookId(): Int?
+
+    @Query("UPDATE books SET shelf = :shelf WHERE id = :bookId")
+    suspend fun updateShelf(bookId: Int, shelf: String)
+
+    @Query("UPDATE books SET shelf = :shelf WHERE id IN (:bookIds)")
+    suspend fun updateShelfForBooks(bookIds: List<Int>, shelf: String)
+
+    @Query("UPDATE books SET shelf = :newShelf WHERE shelf = :oldShelf")
+    suspend fun renameShelf(oldShelf: String, newShelf: String)
+
+    @Query("SELECT DISTINCT shelf FROM books")
+    suspend fun distinctShelves(): List<String>
+
+    @Transaction
+    suspend fun removeLocalFavorites(bookIds: List<Int>) {
+        for (id in bookIds) {
+            removeLocalFavorite(id)
+        }
+    }
+
     @Query("SELECT COUNT(*) FROM books")
     suspend fun bookCount(): Int
 

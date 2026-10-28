@@ -60,6 +60,14 @@ class HtmlDiskCache internal constructor(
     @Volatile
     private var maxBytes: Long = initialMaxBytes
 
+    /** 检查缓存是否存在且未过期。只检查文件元数据，不读文件内容。 */
+    fun has(url: String, ttlMs: Long, category: String = "other"): Boolean {
+        val f = fileFor(url, category)
+        return lock.read {
+            f.exists() && (System.currentTimeMillis() - f.lastModified() <= ttlMs)
+        }
+    }
+
     /** 命中且未过期返回缓存内容；过期自动删除并返回 null。 */
     fun get(url: String, ttlMs: Long, category: String = "other"): String? {
         val f = fileFor(url, category)

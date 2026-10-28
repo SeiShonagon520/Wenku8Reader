@@ -438,4 +438,15 @@
     <string name="about_intro_title">关于本应用</string>
     <string name="about_intro_body">轻小说文库（Wenku8Reader）—— 基于 wenku8.net 的 Android 轻小说阅读客户端。原生 Kotlin + Jetpack Compose + Material Design 3 构建，支持沉浸式阅读、书架收藏、离线下载（TXT/EPUB）、简繁转换与个性化外观定制。</string>
     <string name="about_disclaimer">本应用仅用于个人学习与交流，站点内容版权归原作者及 wenku8.net 所有，请支持正版。</string>
+
+    <!-- 新增特性：正文搜索、书架自定义分组、批量管理、本地书籍导入、应用内离线缓存 -->
+    <string name="search">搜索</string>
+    <string name="search_reader_title">正文搜索</string>
+    <string name="search_current_chapter">当前章节</string>
+    <string name="search_full_book">全本搜索</string>
+    <string name="bookcase_batch_manage">批量管理</string>
+    <string name="bookcase_import_local">导入外部书籍</string>
+    <string name="bookcase_new_group">新建书架分组</string>
+    <string name="bookcase_move_to_group">移至分组</string>
+    <string name="detail_offline_cache">离线缓存</string>
 </resources>
