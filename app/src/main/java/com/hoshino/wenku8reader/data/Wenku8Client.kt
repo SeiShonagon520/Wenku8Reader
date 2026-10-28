@@ -940,6 +940,42 @@ class Wenku8Client(
         }
     }
 
+    /** Read one page of public book-review topics. Review pages are loaded only on demand. */
+    suspend fun bookReviews(bookId: Int, page: Int = 1): BookReviewPage = withContext(Dispatchers.IO) {
+        require(bookId > 0) { "书籍编号无效" }
+        val safePage = page.coerceAtLeast(1)
+        val parsed = tryDirect(
+            urlFor = { host ->
+                "$host/modules/article/reviews.php?aid=$bookId&type=all&page=$safePage"
+            },
+            parse = { html -> ReviewParsers.parseBookReviews(html, bookId, safePage) },
+        ) ?: fetchWithBypass(
+            urlFor = { host ->
+                "$host/modules/article/reviews.php?aid=$bookId&type=all&page=$safePage"
+            },
+            parse = { html -> ReviewParsers.parseBookReviews(html, bookId, safePage) },
+        )
+        parsed ?: throw IOException("书评列表加载失败")
+    }
+
+    /** Read one page of a public review topic and its replies. */
+    suspend fun reviewThread(reviewId: Int, page: Int = 1): ReviewThreadPage = withContext(Dispatchers.IO) {
+        require(reviewId > 0) { "书评编号无效" }
+        val safePage = page.coerceAtLeast(1)
+        val parsed = tryDirect(
+            urlFor = { host ->
+                "$host/modules/article/reviewshow.php?rid=$reviewId&page=$safePage"
+            },
+            parse = { html -> ReviewParsers.parseReviewThread(html, reviewId, safePage) },
+        ) ?: fetchWithBypass(
+            urlFor = { host ->
+                "$host/modules/article/reviewshow.php?rid=$reviewId&page=$safePage"
+            },
+            parse = { html -> ReviewParsers.parseReviewThread(html, reviewId, safePage) },
+        )
+        parsed ?: throw IOException("书评内容加载失败")
+    }
+
     suspend fun chapters(bookId: Int, groupId: Int): List<Volume> = withContext(Dispatchers.IO) {
         singleFlight.run("toc_$bookId") {
             tocCache.get("toc_$bookId") ?: run {

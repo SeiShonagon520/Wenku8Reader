@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hoshino.wenku8reader.R
 import com.hoshino.wenku8reader.data.local.AppPreferences
+import com.hoshino.wenku8reader.data.local.AccountSession
 import com.hoshino.wenku8reader.data.local.LibraryBook
 import com.hoshino.wenku8reader.data.local.LibraryStore
 import com.hoshino.wenku8reader.data.local.ReadingProgress
@@ -106,6 +107,7 @@ class BookcaseViewModel(
     private val progressStore: ReadingProgressStore,
     private val preferences: AppPreferences,
     private val client: Wenku8Client,
+    private val accountSession: AccountSession,
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(
@@ -117,11 +119,8 @@ class BookcaseViewModel(
     )
     val ui: StateFlow<BookcaseUiState> = _ui.asStateFlow()
 
-    private val _currentUsername = MutableStateFlow(preferences.customUsername)
-    val currentUsername: StateFlow<String?> = _currentUsername.asStateFlow()
-
-    private val _isCustomAccount = MutableStateFlow(preferences.isCustomAccount)
-    val isCustomAccount: StateFlow<Boolean> = _isCustomAccount.asStateFlow()
+    val currentUsername: StateFlow<String?> = accountSession.username
+    val isCustomAccount: StateFlow<Boolean> = accountSession.isCustomAccount
 
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
@@ -141,11 +140,9 @@ class BookcaseViewModel(
             try {
                 val res = client.login(trimmedUser, trimmedPass)
                 val credentialsSaved = res.success &&
-                    preferences.saveCustomAccount(trimmedUser, trimmedPass)
+                    accountSession.saveCustomAccount(trimmedUser, trimmedPass)
                 withContext(Dispatchers.Main) {
                     if (res.success) {
-                        _currentUsername.value = trimmedUser
-                        _isCustomAccount.value = true
                         onResult(
                             true,
                             if (credentialsSaved) "登录成功，已绑定个人账号"
@@ -164,9 +161,7 @@ class BookcaseViewModel(
 
     /** 退出个人文库8账号并切回访客模式 */
     fun logout(onResult: (String) -> Unit) {
-        preferences.clearCustomAccount()
-        _currentUsername.value = null
-        _isCustomAccount.value = false
+        accountSession.clearCustomAccount()
         viewModelScope.launch(Dispatchers.IO) {
             client.clearUserSession()
             withContext(Dispatchers.Main) {

@@ -13,6 +13,8 @@ import com.hoshino.wenku8reader.ui.downloads.DownloadsViewModel
 import com.hoshino.wenku8reader.ui.explore.ExploreViewModel
 import com.hoshino.wenku8reader.ui.explore.TagBooksViewModel
 import com.hoshino.wenku8reader.ui.reader.ReaderViewModel
+import com.hoshino.wenku8reader.ui.reviews.ReviewListViewModel
+import com.hoshino.wenku8reader.ui.reviews.ReviewThreadViewModel
 import com.hoshino.wenku8reader.ui.settings.SettingsViewModel
 import com.hoshino.wenku8reader.ui.stats.ReadingStatsViewModel
 import com.hoshino.wenku8reader.ui.toc.TocViewModel
@@ -36,6 +38,7 @@ object AppViewModelProvider {
                 application().container.libraryStore,
                 application().container.libraryBackupManager,
                 application().container.webDavBackupManager,
+                application().container.accountSession,
             )
         }
         initializer {
@@ -44,6 +47,7 @@ object AppViewModelProvider {
                 application().container.readingProgressStore,
                 application().container.preferences,
                 application().container.client,
+                application().container.accountSession,
             )
         }
         initializer {
@@ -53,6 +57,18 @@ object AppViewModelProvider {
                 application().container.downloadEngine,
                 application().container.libraryStore,
                 application().container.readingProgressStore,
+            )
+        }
+        initializer {
+            ReviewListViewModel(
+                createSavedStateHandle(),
+                application().container.repository,
+            )
+        }
+        initializer {
+            ReviewThreadViewModel(
+                createSavedStateHandle(),
+                application().container.repository,
             )
         }
         initializer { DownloadsViewModel(application().container.downloadEngine) }

@@ -17,6 +17,8 @@ object Routes {
     const val DOWNLOADS = "downloads"
     const val STATS = "stats"
     const val DETAIL = "detail/{id}"
+    const val REVIEWS = "reviews/{bookId}"
+    const val REVIEW_THREAD = "review/{reviewId}"
     const val READER = "reader/{id}?cid={cid}"
     const val TAG = "tag/{tag}"
     const val AUTHOR = "author/{name}"
@@ -24,6 +26,8 @@ object Routes {
     const val SEARCH = "search?keyword={keyword}&byAuthor={byAuthor}"
 
     fun detail(id: Int) = "detail/$id"
+    fun reviews(bookId: Int) = "reviews/$bookId"
+    fun reviewThread(reviewId: Int) = "review/$reviewId"
     fun reader(id: Int, cid: String? = null) =
         if (cid == null) "reader/$id" else "reader/$id?cid=${Uri.encode(cid)}"
     fun tag(tag: String) = "tag/${Uri.encode(tag)}"

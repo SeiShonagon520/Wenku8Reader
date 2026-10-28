@@ -6,6 +6,7 @@ import com.hoshino.wenku8reader.data.UpdateCenter
 import com.hoshino.wenku8reader.data.UpdateChecker
 import com.hoshino.wenku8reader.data.Wenku8Client
 import com.hoshino.wenku8reader.data.local.AppPreferences
+import com.hoshino.wenku8reader.data.local.AccountSession
 import com.hoshino.wenku8reader.data.local.AppStorageManager
 import com.hoshino.wenku8reader.data.local.DefaultAccount
 import com.hoshino.wenku8reader.data.local.LibraryStore
@@ -63,6 +64,9 @@ class AppContainer(context: Context) {
     val readerSettings: ReaderSettings = ReaderSettings(context, applicationScope)
 
     val preferences: AppPreferences = AppPreferences(context)
+
+    /** Shared login identity observed by the settings and bookshelf screens. */
+    val accountSession: AccountSession = AccountSession(preferences, applicationScope)
 
     /** 主镜像随设置可切换（见 ReaderSettings.primaryMirror）；优先使用用户个人账号，未设置则使用内置共享账号。 */
     val client: Wenku8Client = Wenku8Client(

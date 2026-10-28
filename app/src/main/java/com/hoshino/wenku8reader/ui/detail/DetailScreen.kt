@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -81,6 +82,7 @@ fun DetailScreen(
     onOpenAuthor: (String) -> Unit,
     onOpenTag: (String) -> Unit,
     onOpenToc: (Int) -> Unit,
+    onOpenReviews: (Int) -> Unit,
     vm: DetailViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
@@ -260,6 +262,15 @@ fun DetailScreen(
                             Icon(Icons.AutoMirrored.Filled.List, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
                             Text(stringResource(R.string.detail_toc))
+                        }
+
+                        FilledTonalButton(
+                            onClick = { onOpenReviews(vm.bookId) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Filled.Forum, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.reviews_open))
                         }
 
                         // 离线下载

@@ -7,6 +7,7 @@ import com.hoshino.wenku8reader.data.BookInfo
 import com.hoshino.wenku8reader.data.UpdateCenter
 import com.hoshino.wenku8reader.data.Wenku8Client
 import com.hoshino.wenku8reader.data.local.AppPreferences
+import com.hoshino.wenku8reader.data.local.AccountSession
 import com.hoshino.wenku8reader.data.local.AppStorageManager
 import com.hoshino.wenku8reader.data.local.DefaultAccount
 import com.hoshino.wenku8reader.data.local.LibraryStore
@@ -77,17 +78,15 @@ class SettingsViewModel(
     private val libraryStore: LibraryStore,
     private val libraryBackupManager: LibraryBackupManager,
     private val webDavBackupManager: WebDavBackupManager,
+    private val accountSession: AccountSession,
 ) : ViewModel() {
 
     val ui: StateFlow<ReaderSettingsState> = readerSettings.flow
     val webDavState: StateFlow<WebDavBackupState> = webDavBackupManager.state
 
     // ---- 个人账号与云端书架 ----
-    private val _currentUsername = MutableStateFlow(preferences.customUsername)
-    val currentUsername: StateFlow<String?> = _currentUsername.asStateFlow()
-
-    private val _isCustomAccount = MutableStateFlow(preferences.isCustomAccount)
-    val isCustomAccount: StateFlow<Boolean> = _isCustomAccount.asStateFlow()
+    val currentUsername: StateFlow<String?> = accountSession.username
+    val isCustomAccount: StateFlow<Boolean> = accountSession.isCustomAccount
 
     private val _isSyncingBookshelf = MutableStateFlow(false)
     val isSyncingBookshelf: StateFlow<Boolean> = _isSyncingBookshelf.asStateFlow()
@@ -360,11 +359,9 @@ class SettingsViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val res = client.login(trimmedUser, trimmedPass)
             val credentialsSaved = res.success &&
-                preferences.saveCustomAccount(trimmedUser, trimmedPass)
+                accountSession.saveCustomAccount(trimmedUser, trimmedPass)
             withContext(Dispatchers.Main) {
                 if (res.success) {
-                    _currentUsername.value = trimmedUser
-                    _isCustomAccount.value = true
                     onResult(
                         true,
                         if (credentialsSaved) "登录成功，已绑定个人账号"
@@ -380,9 +377,7 @@ class SettingsViewModel(
 
     /** 退出个人账号并切回内置共享账号 */
     fun logout() {
-        preferences.clearCustomAccount()
-        _currentUsername.value = null
-        _isCustomAccount.value = false
+        accountSession.clearCustomAccount()
         viewModelScope.launch(Dispatchers.IO) {
             client.clearUserSession()
             client.ensureLoggedIn()

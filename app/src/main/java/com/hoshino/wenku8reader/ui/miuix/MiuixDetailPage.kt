@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -66,6 +67,7 @@ fun MiuixDetailPage(
     onOpenAuthor: (String) -> Unit,
     onOpenTag: (String) -> Unit,
     onOpenToc: (Int) -> Unit,
+    onOpenReviews: (Int) -> Unit,
     vm: DetailViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
@@ -160,6 +162,15 @@ fun MiuixDetailPage(
                     onClick = { onOpenToc(vm.bookId) },
                     modifier = Modifier.fillMaxWidth(),
                 )
+
+                Button(
+                    onClick = { onOpenReviews(vm.bookId) },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) {
+                    Icon(imageVector = Icons.Filled.Forum, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.reviews_open))
+                }
 
                 MiuixDownloadCard(
                     busy = busy,

@@ -67,6 +67,8 @@ import com.hoshino.wenku8reader.ui.explore.SearchScreen
 import com.hoshino.wenku8reader.ui.explore.TagBooksScreen
 import com.hoshino.wenku8reader.ui.navigation.Routes
 import com.hoshino.wenku8reader.ui.reader.ReaderScreen
+import com.hoshino.wenku8reader.ui.reviews.ReviewListScreen
+import com.hoshino.wenku8reader.ui.reviews.ReviewThreadScreen
 import com.hoshino.wenku8reader.ui.settings.CustomizationScreen
 import com.hoshino.wenku8reader.ui.settings.SettingsPage
 import com.hoshino.wenku8reader.ui.settings.AppearanceSettingsPage
@@ -97,6 +99,8 @@ import com.hoshino.wenku8reader.ui.miuix.MiuixTagBooksPage
 import com.hoshino.wenku8reader.ui.miuix.MiuixStatsPage
 import com.hoshino.wenku8reader.ui.miuix.MiuixDownloadsPage
 import com.hoshino.wenku8reader.ui.miuix.MiuixAboutPage
+import com.hoshino.wenku8reader.ui.miuix.MiuixReviewListPage
+import com.hoshino.wenku8reader.ui.miuix.MiuixReviewThreadPage
 import com.hoshino.wenku8reader.ui.miuix.LocalFloatingBarInset
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
@@ -415,6 +419,7 @@ fun MainScaffold() {
                         onOpenAuthor = { name -> nav.navigate(Routes.author(name)) },
                         onOpenTag = { tag -> nav.navigate(Routes.tag(tag)) },
                         onOpenToc = { bookId -> nav.navigate(Routes.toc(bookId)) },
+                        onOpenReviews = { bookId -> nav.navigate(Routes.reviews(bookId)) },
                     )
                 } else {
                     DetailScreen(
@@ -423,7 +428,34 @@ fun MainScaffold() {
                         onOpenAuthor = { name -> nav.navigate(Routes.author(name)) },
                         onOpenTag = { tag -> nav.navigate(Routes.tag(tag)) },
                         onOpenToc = { bookId -> nav.navigate(Routes.toc(bookId)) },
+                        onOpenReviews = { bookId -> nav.navigate(Routes.reviews(bookId)) },
                     )
+                }
+            }
+            composable(
+                Routes.REVIEWS,
+                arguments = listOf(navArgument("bookId") { type = NavType.IntType }),
+            ) {
+                if (isMiuixStyle()) {
+                    MiuixReviewListPage(
+                        onBack = { nav.popBackStack() },
+                        onOpenThread = { reviewId -> nav.navigate(Routes.reviewThread(reviewId)) },
+                    )
+                } else {
+                    ReviewListScreen(
+                        onBack = { nav.popBackStack() },
+                        onOpenThread = { reviewId -> nav.navigate(Routes.reviewThread(reviewId)) },
+                    )
+                }
+            }
+            composable(
+                Routes.REVIEW_THREAD,
+                arguments = listOf(navArgument("reviewId") { type = NavType.IntType }),
+            ) {
+                if (isMiuixStyle()) {
+                    MiuixReviewThreadPage(onBack = { nav.popBackStack() })
+                } else {
+                    ReviewThreadScreen(onBack = { nav.popBackStack() })
                 }
             }
             composable(

@@ -1,12 +1,14 @@
 package com.hoshino.wenku8reader.data.repository
 
 import com.hoshino.wenku8reader.data.BookInfo
+import com.hoshino.wenku8reader.data.BookReviewPage
 import com.hoshino.wenku8reader.data.BookcaseItem
 import com.hoshino.wenku8reader.data.ChapterContent
 import com.hoshino.wenku8reader.data.HomeBook
 import com.hoshino.wenku8reader.data.HomeSection
 import com.hoshino.wenku8reader.data.SearchResult
 import com.hoshino.wenku8reader.data.Volume
+import com.hoshino.wenku8reader.data.ReviewThreadPage
 import com.hoshino.wenku8reader.data.Wenku8Client
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -25,6 +27,12 @@ class Wenku8Repository(private val client: Wenku8Client) {
 
     suspend fun bookInfo(id: Int): Result<BookInfo> =
         runCatchingNotCancelling { client.bookInfo(id) }
+
+    suspend fun bookReviews(bookId: Int, page: Int): Result<BookReviewPage> =
+        runCatchingNotCancelling { client.bookReviews(bookId, page) }
+
+    suspend fun reviewThread(reviewId: Int, page: Int): Result<ReviewThreadPage> =
+        runCatchingNotCancelling { client.reviewThread(reviewId, page) }
 
     suspend fun chapters(bookId: Int, groupId: Int): Result<List<Volume>> =
         runCatchingNotCancelling { client.chapters(bookId, groupId) }

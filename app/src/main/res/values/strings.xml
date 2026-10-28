@@ -136,6 +136,21 @@
     <string name="detail_favorite">收藏</string>
     <string name="detail_fav_local_done">已收藏至本地书架</string>
     <string name="detail_fav_local_removed">已从本地书架移除</string>
+    <string name="reviews_open">查看书评</string>
+    <string name="reviews_list_title">%1$s · 书评</string>
+    <string name="reviews_book_fallback">书评</string>
+    <string name="reviews_thread_title">书评回复</string>
+    <string name="reviews_refresh">刷新书评</string>
+    <string name="reviews_refreshing">正在刷新…</string>
+    <string name="reviews_loading">正在加载书评…</string>
+    <string name="reviews_empty">这本书暂时没有书评</string>
+    <string name="reviews_thread_empty">暂时没有评论内容</string>
+    <string name="reviews_stats">回复 %1$d · 浏览 %2$d</string>
+    <string name="reviews_load_more_topics">加载更多书评</string>
+    <string name="reviews_load_more_replies">加载更多回复</string>
+    <string name="reviews_retry_load_more">重试加载</string>
+    <string name="reviews_original_post">原帖</string>
+    <string name="reviews_floor">第 %1$d 楼</string>
 
     <!-- 详情 · 目录 / 作者 / 标签 -->
     <string name="detail_toc">目录</string>
